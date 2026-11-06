@@ -202,7 +202,8 @@ details.karta[open] summary::after { content: '－'; }
 
 /* ---------- Týden ---------- */
 .tyden { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-.den { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: var(--druhotny); }
+.den { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: var(--druhotny); text-decoration: none; }
+a.den .kolecko { border: 1.5px solid transparent; }
 .den .kolecko { width: 36px; height: 36px; border-radius: 18px; background: #EFEAE2; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: var(--inkoust); }
 .den.dnes { color: var(--inkoust); font-weight: 600; }
 .den.dnes .kolecko { border: 1.5px dashed #B9AE9E; background: transparent; }
@@ -239,3 +240,9 @@ details.karta[open] summary::after { content: '－'; }
 
 /* Číselné řady (síla, otázky pro výzkum) vždy u pravého okraje, ať jsou pod sebou */
 .vybrana-polozka .tecky, .vybrana-polozka .hladiny { margin-left: auto; }
+
+/* ---------- Barva dne ---------- */
+.vzorky { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.vzorek { aspect-ratio: 1; border-radius: 50%; border: 1px solid rgba(31,42,38,.15); cursor: pointer; font-size: 18px; font-weight: 600; }
+.vzorek[aria-pressed="true"] { outline: 3px solid var(--inkoust); outline-offset: 2px; }
+.vzorek-maly { display: inline-block; width: 18px; height: 18px; border-radius: 9px; vertical-align: middle; border: 1px solid rgba(31,42,38,.2); }

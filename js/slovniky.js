@@ -157,3 +157,16 @@ export const VYZKUM = [
   { klic: 'starost',      text: 'starost',              kladne: false },
   { klic: 'bolest',       text: 'bolest',               kladne: false }
 ];
+
+// ---------------------------------------------------------------------
+// DÉLKA BLOKU (večerní ohlédnutí). „min“ je odhad v minutách
+// (střed rozmezí), podle něj se počítají podíly času.
+// ---------------------------------------------------------------------
+export const DELKY = [
+  { text: 'do 15 min',   min: 10 },
+  { text: '15–30 min',   min: 22 },
+  { text: '30–60 min',   min: 45 },
+  { text: '1–2 h',       min: 90 },
+  { text: '2–4 h',       min: 180 },
+  { text: 'víc než 4 h', min: 300 }
+];

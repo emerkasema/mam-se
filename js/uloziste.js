@@ -6,7 +6,7 @@
 
 const NAZEV_DB = 'mamse';
 const VERZE_DB = 1;
-export const VERZE_APLIKACE = '0.1.9';
+export const VERZE_APLIKACE = '0.3.0';
 
 // Výchozí nastavení – použije se, dokud člověk nic nezmění.
 export const VYCHOZI_NASTAVENI = {

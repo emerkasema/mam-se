@@ -53,6 +53,15 @@ function dnesniDatumText() {
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
+// Popis času u záznamu. Večerní záznamy přesný čas nemají – patří ke dni.
+function popisCasu(z) {
+  if (z.typ !== 'vecerni') return casZaznamu(z.chvile_od);
+  const datum = z.chvile_od.slice(0, 10);
+  if (datum === U.datumDne()) return 'dnes · večerní ohlédnutí';
+  const d = new Date(datum + 'T12:00:00');
+  return d.getDate() + '. ' + (d.getMonth() + 1) + '. · večerní ohlédnutí';
+}
+
 function casZaznamu(iso) {
   const d = new Date(iso);
   const cas = d.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
@@ -155,6 +164,11 @@ function novyKoncept() {
     kde: null,
     vyzkum: {},           // { klic: 0–6 }
     fotka: null,          // zmenšená fotka (Blob) nebo nic
+    typ: 'okamzity',      // 'okamzity' nebo 'vecerni'
+    chvileOd: null,       // u večerních záznamů začátek dne, jinak čas vzniku
+    poradi: null,         // pořadí bloku ve večerním ohlédnutí
+    delkaMin: null,       // délka bloku v minutách (odhad)
+    smysluplnost: null,   // „Jak smysluplné to pro Tebe bylo?“ 0–6
     strategie: '',
     prosba: ''
   };
@@ -176,14 +190,16 @@ function sestavZaznam(k) {
 
   return {
     id: k.id,
-    typ: 'okamzity',
+    typ: k.typ || 'okamzity',
     vytvoreno: k.vytvoreno,
     upraveno: k.upraveno || null,
-    chvile_od: k.vytvoreno,
-    chvile_delka_min: null,
+    chvile_od: k.chvileOd || k.vytvoreno,
+    chvile_delka_min: k.delkaMin ?? null,
+    poradi: k.poradi ?? null,
+    smysluplnost: k.smysluplnost ?? null,
     prijemnost: k.prijemnost,
     vlastni_slova: k.text.trim(),
-    emoce: Object.entries(k.emoce).map(([slovo, v]) => ({
+    emoce: Object.entries(k.emoce).filter(([slovo, v]) => !jenRozbalenaZakladni(k, slovo, v)).map(([slovo, v]) => ({
       slovo,
       zakladni: S.zakladniPro(slovo),
       intenzita: v.intenzita,
@@ -215,6 +231,14 @@ function sestavZaznam(k) {
     fotka: k.fotka || null,
     verze_protokolu: S.VERZE_PROTOKOLU
   };
+}
+
+// Základní emoce bez síly, pod kterou člověk vybral přesnější slovo,
+// byla jen „rozbalená“ – přesnější slovo ji nahrazuje a do záznamu nejde.
+// Obě se uloží jen tehdy, když mají obě zadanou sílu.
+function jenRozbalenaZakladni(k, slovo, v) {
+  if (!S.ZAKLADNI_EMOCE.includes(slovo) || v.intenzita != null) return false;
+  return S.presnejsiK(slovo).some(p => k.emoce[p]);
 }
 
 // Slova ze slovníku, která aplikace poznala ve vlastním textu.
@@ -254,7 +278,10 @@ function navigace(aktivni) {
 
 // ---------------- DOMOV ----------------
 async function obrazovkaDomov() {
-  const vse = (await U.vsechnyZaznamy()).sort((a, b) => b.chvile_od.localeCompare(a.chvile_od));
+  const vse = (await U.vsechnyZaznamy()).sort((a, b) => (b.upraveno || b.vytvoreno).localeCompare(a.upraveno || a.vytvoreno));
+
+  const dnesDen = await U.nactiDen(denOhlednuti());
+  const dnesVecer = !!(dnesDen && dnesDen.vecerni_hotovo);
 
   // Tento týden (pondělí až neděle)
   const dnes = new Date();
@@ -269,9 +296,17 @@ async function obrazovkaDomov() {
     const datum = U.datumDne(den);
     const pocet = vse.filter(z => z.chvile_od.slice(0, 10) === datum).length;
     const jeDnes = datum === U.datumDne();
-    tyden += '<div class="den' + (jeDnes ? ' dnes' : '') + '"><span class="kolecko"' +
-      (pocet ? ' style="background: var(--jemna-zelena)"' : '') + ' aria-label="' + zkratky[i] + ': ' + pocet + ' záznamů">' +
-      (pocet || '') + '</span>' + zkratky[i] + '</div>';
+    const budouci = datum > U.datumDne();
+    const den_ = await U.nactiDen(datum);
+    const barva = nastaveni.barva_dne_zapnuta && den_ && den_.barva;
+    let styl = '';
+    if (barva) styl = ' style="background:' + barva + ';color:' + inkoustPro(barva) + ';border-color:' + barva + '"';
+    else if (pocet) styl = ' style="background: var(--jemna-zelena)"';
+    const popisek = zkratky[i] + ' ' + den.getDate() + '. ' + (den.getMonth() + 1) + '.: ' + pocet + ' záznamů' + (barva ? ', barva dne' : '');
+    tyden += budouci
+      ? '<div class="den"><span class="kolecko" aria-label="' + popisek + '"></span>' + zkratky[i] + '</div>'
+      : '<a class="den' + (jeDnes ? ' dnes' : '') + '" href="#/den/' + datum + '"><span class="kolecko"' + styl +
+        ' aria-label="' + popisek + '">' + (pocet || '') + '</span>' + zkratky[i] + '</a>';
   }
 
   // Posledních pět záznamů
@@ -281,7 +316,7 @@ async function obrazovkaDomov() {
     const trida = p == null ? '' : p > 0 ? ' prijemna' : p < 0 ? ' neprijemna' : '';
     const popis = z.emoce.length
       ? z.emoce.map(e => e.slovo + (e.intenzita != null ? ' ' + e.intenzita : '')).join(', ')
-      : (z.vlastni_slova ? z.vlastni_slova.slice(0, 80) + (z.vlastni_slova.length > 80 ? '…' : '') : (z.fotka ? '' : 'bez slov'));
+      : (z.vlastni_slova ? z.vlastni_slova.slice(0, 80) + (z.vlastni_slova.length > 80 ? '…' : '') : (z.fotka ? '' : 'beze slov'));
     seznam += '<a class="zaznam-radek" href="#/detail/' + encodeURIComponent(z.id) + '"><span class="znamka' + trida + '" aria-label="Příjemnost ' + (p ?? 'nevyplněna') + '">' +
       (p == null ? '–' : p > 0 ? '+' + p : p) + '</span><div><div class="tlumene male">' + casZaznamu(z.chvile_od) +
       '</div><div>' + h(popis) + (z.fotka ? ' <span class="tlumene">· fotka</span>' : '') + '</div></div><span class="sipka" aria-hidden="true">›</span></a>';
@@ -301,9 +336,10 @@ async function obrazovkaDomov() {
     '</a>' + rozepsano +
     '<a class="tlacitko-pomoc" href="#/pomoc">' + IKONA.srdce + 'Potřebuju pomoc</a>' +
     '<section class="karta"><div class="karta-radek"><h2>Večerní ohlédnutí</h2><span class="tlumene">v ' + h(nastaveni.pripominka_cas) + '</span></div>' +
-      '<p class="tlumene">Jaký byl Tvůj den? Tuhle část přidáme v dalším kroku.</p></section>' +
+      '<p class="tlumene">' + (dnesVecer ? 'Dnešní ohlédnutí je hotové. Můžeš ho kdykoli doplnit.' : 'Jaký byl Tvůj den?') + '</p>' +
+      '<a class="tlacitko jemne" style="align-self:flex-start" href="#/vecer">' + (dnesVecer ? 'Upravit ohlédnutí' : 'Začít ohlédnutí') + '</a></section>' +
     '<section class="karta"><div class="karta-radek"><h2>Tento týden</h2></div><div class="tyden">' + tyden + '</div>' +
-      '<p class="tlumene male">Číslo v kolečku je počet záznamů. Barvy dnů přibudou s večerním ohlédnutím.</p></section>' +
+      '<p class="tlumene male">Číslo v kolečku je počet záznamů. Klepnutím na den ' + (nastaveni.barva_dne_zapnuta ? 'zvolíš jeho barvu a uvidíš jeho záznamy.' : 'uvidíš jeho záznamy.') + '</p></section>' +
     (seznam ? '<section class="seznam" aria-label="Poslední záznamy"><h2>Poslední záznamy</h2>' + seznam + '</section>' : '') +
     '</main>' + navigace('domov');
 }
@@ -414,6 +450,13 @@ function vykresliPoznana() {
     : '';
 }
 
+// Kam vede „Zpět“ z druhého kroku: do večerního ohlédnutí, na Hotovo, nebo na krok 1.
+function zpetZDruheho(k) {
+  if (k.typ === 'vecerni' && vecer) return '#/vecer/' + vecer.datum;
+  if (k.fokus) return '#/hotovo';
+  return '#/zaznam';
+}
+
 // ---------------- OKAMŽITÝ ZÁZNAM – krok 2 ----------------
 function obrazovkaZaznamDal() {
   if (!koncept) koncept = novyKoncept();
@@ -487,7 +530,7 @@ function obrazovkaZaznamDal() {
   }
 
   return '<header class="hlavicka">' +
-      '<a class="ikona-tlacitko bez-okraje" href="#/zaznam" aria-label="Zpět na první část">' + IKONA.zpet + '</a>' +
+      '<a class="ikona-tlacitko bez-okraje" href="' + zpetZDruheho(k) + '" aria-label="Zpět">' + IKONA.zpet + '</a>' +
       '<span class="nazev-obrazovky">Jak se mám? · víc</span>' +
       '<a class="tlacitko obrys male-t" href="#/pomoc">' + IKONA.srdce + 'Pomoc</a>' +
     '</header>' +
@@ -514,7 +557,7 @@ function obrazovkaZaznamDal() {
       ]) +
     '</main>' +
     '<footer class="spodni-lista">' +
-      (k.fokus ? '<a class="tlacitko obrys" href="#/hotovo">Zpět</a>' : '<a class="tlacitko obrys" href="#/zaznam">Zpět</a>') +
+      '<a class="tlacitko obrys" href="' + zpetZDruheho(k) + '">Zpět</a>' +
       '<button type="button" class="tlacitko" data-akce="ulozit">Uložit</button>' +
     '</footer>';
 }
@@ -530,6 +573,19 @@ function tlacitkoDiktovani(cil) {
   const bezi = diktovani && diktovaniCil === cil;
   return '<button type="button" class="tlacitko obrys male-t" data-akce="diktovat" data-cil="' + cil + '">' +
     IKONA.mikrofon + (bezi ? 'Poslouchám… klepni pro konec' : 'Diktovat') + '</button>';
+}
+
+// Cíl „blok:3“ = vlastní slova ke třetímu bloku večerního ohlédnutí.
+function hodnotaCile(cil) {
+  if (cil.startsWith('blok:')) return vecer.bloky[+cil.slice(5)].text;
+  return koncept[cil];
+}
+function nastavCil(cil, text) {
+  if (cil.startsWith('blok:')) vecer.bloky[+cil.slice(5)].text = text;
+  else koncept[cil] = text;
+}
+function idPoleCile(cil) {
+  return cil.startsWith('blok:') ? 'blok-text-' + cil.slice(5) : ID_POLE[cil];
 }
 
 // Pole pro psaní s tlačítkem Diktovat pod ním.
@@ -601,6 +657,355 @@ function blokFotky(k) {
     '</div>';
 }
 
+// ---------------- DEN (barva dne a záznamy toho dne) ----------------
+
+// Nabídka barev. Jsou tu světlé i tmavé – písmo se přizpůsobí samo.
+const BARVY_DNE = [
+  '#246B56', '#72B97F', '#CFE3D6', '#3E6B5A',
+  '#E6B173', '#F5BE4B', '#F2D7B6', '#E8E2C4',
+  '#F4C7C3', '#C9706B', '#D9D2EA', '#8C6BB1',
+  '#BFD8E8', '#4F7CA8', '#2B3A55', '#7A4E3A',
+  '#B9AE9E', '#5E6B65', '#1F2A26', '#FFFDF9'
+];
+
+// Světlost barvy (0 tmavá … 1 světlá) podle pravidel přístupnosti WCAG.
+function svetlost(hex) {
+  const c = [1, 3, 5].map(i => {
+    const v = parseInt(hex.substr(i, 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+}
+// Na tmavé barvě světlé písmo, na světlé tmavé – vždy dobře čitelné.
+function inkoustPro(hex) { return svetlost(hex) < 0.18 ? '#F7F2EA' : '#1F2A26'; }
+
+async function obrazovkaDen(datum) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(datum || '')) return '<main class="obsah"><h1>Den nenalezen</h1><a class="tlacitko" href="#/domov">Domů</a></main>';
+  const den = (await U.nactiDen(datum)) || { datum, barva: null, vecerni_hotovo: false, poznamka: '' };
+  const zaznamy = (await U.vsechnyZaznamy()).filter(z => z.chvile_od.slice(0, 10) === datum)
+    .sort((a, b) => (a.typ === 'vecerni') - (b.typ === 'vecerni') || a.chvile_od.localeCompare(b.chvile_od) || (a.poradi ?? 99) - (b.poradi ?? 99));
+  const d = new Date(datum + 'T12:00:00');
+  let nazev = new Intl.DateTimeFormat('cs-CZ', { weekday: 'long', day: 'numeric', month: 'long' }).format(d);
+  nazev = nazev.charAt(0).toUpperCase() + nazev.slice(1);
+
+  let barvy = '';
+  if (nastaveni.barva_dne_zapnuta) {
+    const vzorky = BARVY_DNE.map(b => '<button type="button" class="vzorek" data-akce="barvaDne" data-datum="' + datum + '" data-barva="' + b +
+      '" aria-pressed="' + (den.barva === b) + '" aria-label="Barva ' + b + '" style="background:' + b + ';color:' + inkoustPro(b) + '">' +
+      (den.barva === b ? '✓' : '') + '</button>').join('');
+    const vlastni = den.barva && !BARVY_DNE.includes(den.barva);
+    barvy = '<section class="karta"><h2>Jakou barvu měl Tvůj den?</h2>' +
+      '<div class="vzorky">' + vzorky + '</div>' +
+      '<div class="odkazy"><label class="tlacitko obrys male-t" style="cursor:pointer">Jiná barva…' +
+        '<input type="color" class="skryte" data-akce="barvaVlastni" data-datum="' + datum + '" value="' + (den.barva || '#72B97F') + '"></label>' +
+        (den.barva ? '<button type="button" class="tlacitko obrys male-t" data-akce="barvaDne" data-datum="' + datum + '" data-barva="">Bez barvy</button>' : '') +
+      '</div>' +
+      (vlastni ? '<p class="tlumene male">Vlastní barva: <span class="vzorek-maly" style="background:' + den.barva + '"></span></p>' : '') +
+      '<p class="tlumene male">Barvu si volíš ' + tvar('sama', 'sám') + ' a kdykoli ji změníš. Vypnout ji jde v Nastavení.</p></section>';
+  }
+
+  // Ukázka, jak den vypadá v barvě (deníkový záznam má barevný motiv)
+  const pozadi = nastaveni.barva_dne_zapnuta && den.barva ? den.barva : null;
+  const motiv = pozadi ? ' style="background:' + pozadi + ';color:' + inkoustPro(pozadi) + ';border-color:' + pozadi + '"' : '';
+
+  let seznam = '';
+  for (const z of zaznamy) {
+    const p = z.prijemnost;
+    const popis = z.emoce.length ? z.emoce.map(e => e.slovo).join(', ') : (z.vlastni_slova || (z.fotka ? 'fotka' : 'beze slov'));
+    seznam += '<a class="zaznam-radek" href="#/detail/' + encodeURIComponent(z.id) + '"><span class="znamka">' +
+      (p == null ? '–' : p > 0 ? '+' + p : p) + '</span><div><div class="tlumene male">' +
+      (z.typ === 'vecerni' ? 'večer' : new Date(z.chvile_od).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' })) + '</div><div>' +
+      h(popis.slice(0, 80)) + '</div></div><span class="sipka" aria-hidden="true">›</span></a>';
+  }
+
+  return '<header class="hlavicka">' +
+      '<a class="ikona-tlacitko bez-okraje" href="#/domov" aria-label="Zpět na Domov">' + IKONA.zpet + '</a>' +
+      '<span class="nazev-obrazovky">' + h(nazev) + '</span></header>' +
+    '<main class="obsah">' +
+      '<section class="karta"' + motiv + '><h2>' + h(nazev) + '</h2><p' + (pozadi ? '' : ' class="tlumene"') + '>' +
+        (zaznamy.length ? 'Záznamů: ' + zaznamy.length : 'Tento den zatím bez záznamů.') + '</p></section>' +
+      barvy +
+      '<a class="tlacitko jemne" style="align-self:flex-start" href="#/vecer/' + datum + '">' +
+        (den.vecerni_hotovo ? 'Upravit večerní ohlédnutí' : 'Večerní ohlédnutí tohoto dne') + '</a>' +
+      (seznam ? '<section class="seznam"><h2>Záznamy toho dne</h2>' + seznam + '</section>' : '') +
+    '</main>';
+}
+
+// ---------------- VEČERNÍ OHLÉDNUTÍ ----------------
+// Postup (podle zadání, tok C):
+//  1. bloky – den rozložený do bloků (činnost, délka, s kým, kde)
+//  2. chvile – aplikace vybere 2–3 bloky; u každého „Jaká chvíle to pro
+//     Tebe byla?“, vlastní slova, smysluplnost, volitelně 9 otázek pro výzkum
+//  3. barva – „Jakou barvu měl Tvůj den?“ (jen když je barva zapnutá)
+//  4. shrnuti – krátké shrnutí bez hodnocení + nabídka doplnit další
+// Každý blok se ukládá jako jeden záznam typu „vecerni“.
+
+let vecer = null; // rozpracované ohlédnutí (jen v paměti, ukládá se po krocích)
+
+// Ke kterému dni ohlédnutí patří: po půlnoci (do 4:00) ještě ke včerejšku.
+function denOhlednuti() {
+  const d = new Date();
+  if (d.getHours() < 4) d.setDate(d.getDate() - 1);
+  return U.datumDne(d);
+}
+
+function novyBlok() {
+  return { id: U.noveId(), vytvoreno: U.tedS(), cinnost: null, delkaMin: null, sKym: [], kde: null,
+    hodnotit: false, prijemnost: null, text: '', smysluplnost: null, vyzkum: {}, ulozeny: false };
+}
+
+// Načte ohlédnutí daného dne (když už bylo uložené, jde ho upravit).
+async function pripravVecer(datum) {
+  if (vecer && vecer.datum === datum) return;
+  const zaznamy = (await U.vsechnyZaznamy())
+    .filter(z => z.typ === 'vecerni' && z.poradi != null && z.chvile_od.slice(0, 10) === datum)
+    .sort((a, b) => a.poradi - b.poradi);
+  vecer = {
+    datum,
+    krok: 'bloky',
+    upravovany: null,  // index bloku, který se právě upravuje (nebo 'novy')
+    rozpracovany: null,
+    vlastniCinnost: false,
+    bloky: zaznamy.map(z => ({
+      id: z.id, vytvoreno: z.vytvoreno, cinnost: (z.cinnost || [])[0] || null, delkaMin: z.chvile_delka_min,
+      sKym: z.s_kym || [], kde: z.kde, hodnotit: z.prijemnost != null || !!z.vlastni_slova,
+      prijemnost: z.prijemnost, text: z.vlastni_slova || '', smysluplnost: z.smysluplnost ?? null,
+      vyzkum: Object.fromEntries(Object.entries(z.vyzkum || {}).filter(([, v]) => v != null)),
+      ulozeny: true, puvodni: z
+    }))
+  };
+  if (!vecer.bloky.length) { vecer.upravovany = 'novy'; vecer.rozpracovany = novyBlok(); }
+}
+
+function delkaText(min) {
+  const d = S.DELKY.find(x => x.min === min);
+  return d ? d.text : '';
+}
+
+function popisBloku(b) {
+  return [b.cinnost || 'bez činnosti', delkaText(b.delkaMin), b.sKym.join(', '), b.kde].filter(Boolean).join(' · ');
+}
+
+// Aplikace vybere 2–3 chvíle: nejdelší bloky, každý s jinou činností.
+function vyberChvile() {
+  if (vecer.bloky.some(b => b.hodnotit)) return; // už vybrané (nebo ručně upravené)
+  const serazene = vecer.bloky.map((b, i) => ({ b, i })).sort((x, y) => (y.b.delkaMin || 0) - (x.b.delkaMin || 0));
+  const cinnosti = new Set();
+  let pocet = 0;
+  for (const { b } of serazene) {
+    if (pocet >= 3) break;
+    if (cinnosti.has(b.cinnost) && serazene.length > 3) continue;
+    b.hodnotit = true; cinnosti.add(b.cinnost); pocet++;
+  }
+}
+
+// Uloží všechny bloky jako záznamy (nové přidá, upravené přepíše).
+async function ulozVecer() {
+  const zacatekDne = U.tedS(new Date(vecer.datum + 'T00:00:00'));
+  for (let i = 0; i < vecer.bloky.length; i++) {
+    const b = vecer.bloky[i];
+    const zaklad = b.puvodni || {};
+    const zaznam = Object.assign({}, zaklad, {
+      id: b.id, typ: 'vecerni', vytvoreno: b.vytvoreno, upraveno: b.ulozeny ? U.tedS() : null,
+      chvile_od: zacatekDne, chvile_delka_min: b.delkaMin, poradi: i,
+      prijemnost: b.hodnotit ? b.prijemnost : null,
+      vlastni_slova: b.hodnotit ? b.text.trim() : '',
+      smysluplnost: b.hodnotit ? b.smysluplnost : null,
+      vyzkum: b.hodnotit && Object.keys(b.vyzkum).length ? Object.fromEntries(S.VYZKUM.map(v => [v.klic, b.vyzkum[v.klic] ?? null])) : null,
+      cinnost: b.cinnost ? [b.cinnost] : [], s_kym: b.sKym, kde: b.kde,
+      emoce: zaklad.emoce || [], telo: zaklad.telo || [], potreby: zaklad.potreby || [],
+      strategie: zaklad.strategie || '', prosba: zaklad.prosba || '', fotka: zaklad.fotka || null,
+      zdroj_textu: b.text.trim() ? (zaklad.zdroj_textu || 'psano') : null,
+      verze_protokolu: S.VERZE_PROTOKOLU
+    });
+    await U.ulozZaznam(zaznam);
+    b.ulozeny = true; b.puvodni = zaznam;
+  }
+  // Bloky, které člověk odebral, smažeme.
+  for (const id of vecer.smazane || []) await U.smazZaznam(id);
+  vecer.smazane = [];
+  const den = (await U.nactiDen(vecer.datum)) || { datum: vecer.datum, barva: null, vecerni_hotovo: false, poznamka: '' };
+  den.vecerni_hotovo = true;
+  await U.ulozDen(den);
+}
+
+// Editor jednoho bloku (nový nebo upravovaný).
+function editorBloku(b) {
+  const cinnosti = S.CINNOSTI.map(c => cip(c, b.cinnost === c, 'blokCinnost', { slovo: c })).join('') +
+    (b.cinnost && !S.CINNOSTI.includes(b.cinnost) ? cip(b.cinnost, true, 'blokCinnost', { slovo: b.cinnost }) : '') +
+    '<button type="button" class="cip pridat" data-akce="blokVlastniOtevrit">+ vlastní</button>';
+  const vlastni = vecer.vlastniCinnost
+    ? '<div class="pole-radek"><input class="vstup" id="vlastni-cinnost" placeholder="Co jsi ' + tvar('dělala', 'dělal') + '?" autocomplete="off">' +
+      '<button type="button" class="tlacitko male-t" data-akce="blokVlastniPridat">Přidat</button></div>' : '';
+  return '<section class="karta">' +
+    '<h2>' + (vecer.upravovany === 'novy' ? 'Další blok dne' : 'Upravit blok') + '</h2>' +
+    '<span class="panel-nadpis">Co jsi ' + tvar('dělala', 'dělal') + '?</span><div class="cipy">' + cinnosti + '</div>' + vlastni +
+    '<span class="panel-nadpis">Jak dlouho zhruba?</span><div class="cipy">' +
+      S.DELKY.map(d => cip(d.text, b.delkaMin === d.min, 'blokDelka', { min: d.min })).join('') + '</div>' +
+    '<span class="panel-nadpis">S kým? (nepovinné)</span><div class="cipy">' +
+      S.S_KYM.map(c => cip(c, b.sKym.includes(c), 'blokSKym', { slovo: c })).join('') + '</div>' +
+    '<span class="panel-nadpis">Kde? (nepovinné)</span><div class="cipy">' +
+      S.KDE.map(c => cip(c, b.kde === c, 'blokKde', { slovo: c })).join('') + '</div>' +
+    '<div class="odkazy"><button type="button" class="tlacitko male-t" data-akce="blokHotovo">' +
+      (vecer.upravovany === 'novy' ? 'Přidat do dne' : 'Hotovo') + '</button>' +
+      (vecer.bloky.length ? '<button type="button" class="tlacitko obrys male-t" data-akce="blokZrusit">Zrušit</button>' : '') +
+      (vecer.upravovany !== 'novy' ? '<button type="button" class="tlacitko obrys male-t" data-akce="blokOdebrat">Odebrat blok</button>' : '') +
+    '</div></section>';
+}
+
+function hlavickaVecera(nazev, zpet) {
+  return '<header class="hlavicka">' +
+    '<a class="ikona-tlacitko bez-okraje" href="' + zpet + '" aria-label="Zpět">' + IKONA.zpet + '</a>' +
+    '<span class="nazev-obrazovky">' + nazev + '</span></header>';
+}
+
+function nazevDneVecera() {
+  if (vecer.datum === U.datumDne()) return 'Večerní ohlédnutí';
+  const d = new Date(vecer.datum + 'T12:00:00');
+  return 'Ohlédnutí · ' + d.getDate() + '. ' + (d.getMonth() + 1) + '.';
+}
+
+async function obrazovkaVecer(parametr) {
+  const datum = /^\d{4}-\d{2}-\d{2}$/.test(parametr || '') ? parametr : denOhlednuti();
+  await pripravVecer(datum);
+  const v = vecer;
+
+  // ---- 1. bloky ----
+  if (v.krok === 'bloky') {
+    let seznam = '';
+    v.bloky.forEach((b, i) => {
+      if (v.upravovany === i) { seznam += editorBloku(v.rozpracovany); return; }
+      seznam += '<button type="button" class="zaznam-radek" style="text-align:left;width:100%;cursor:pointer" data-akce="blokUpravit" data-index="' + i + '">' +
+        '<span class="znamka">' + (i + 1) + '</span><div>' + h(popisBloku(b)) + '</div><span class="sipka" aria-hidden="true">›</span></button>';
+    });
+    const novy = v.upravovany === 'novy' ? editorBloku(v.rozpracovany) : '';
+    const pridat = v.upravovany === null
+      ? '<button type="button" class="tlacitko obrys" style="align-self:flex-start" data-akce="blokNovy">+ Přidat další blok</button>' : '';
+    return hlavickaVecera(nazevDneVecera(), '#/domov') +
+      '<main class="obsah">' +
+        '<div><h1 style="font-size:26px">Co jsi dnes ' + tvar('dělala', 'dělal') + '?</h1>' +
+        '<p class="tlumene">Rozlož si den do bloků, jak šly po sobě. Stačí zhruba – spánek vynech.</p></div>' +
+        (seznam ? '<div class="seznam">' + seznam + '</div>' : '') + novy + pridat +
+      '</main>' +
+      '<footer class="spodni-lista">' +
+        '<a class="tlacitko obrys" href="#/domov">Později</a>' +
+        '<button type="button" class="tlacitko" data-akce="vecerDal"' + (v.bloky.length ? '' : ' disabled') + '>Dál</button>' +
+      '</footer>';
+  }
+
+  // ---- 2. chvíle ----
+  if (v.krok === 'chvile') {
+    let karty = '';
+    v.bloky.forEach((b, i) => {
+      if (!b.hodnotit) return;
+      let skala = '';
+      for (let x = -3; x <= 3; x++) {
+        skala += '<button type="button" data-akce="blokPrijemnost" data-index="' + i + '" data-hodnota="' + x + '" aria-pressed="' + (b.prijemnost === x) +
+          '" aria-label="Hodnota ' + x + '">' + (x > 0 ? '+' + x : x) + '</button>';
+      }
+      let smysl = '<div class="hladiny" role="group" aria-label="Smysluplnost od 0 do 6">';
+      for (let x = 0; x <= 6; x++) {
+        smysl += '<button type="button" data-akce="blokSmysl" data-index="' + i + '" data-hodnota="' + x + '" aria-pressed="' + (b.smysluplnost === x) + '">' + x + '</button>';
+      }
+      smysl += '</div>';
+      let vyzkum = '';
+      for (const q of S.VYZKUM) {
+        let cisla = '<div class="hladiny" role="group" aria-label="' + h(q.text) + ' od 0 do 6">';
+        for (let x = 0; x <= 6; x++) {
+          cisla += '<button type="button" data-akce="blokVyzkum" data-index="' + i + '" data-klic="' + q.klic + '" data-hodnota="' + x +
+            '" aria-pressed="' + (b.vyzkum[q.klic] === x) + '">' + x + '</button>';
+        }
+        vyzkum += '<div class="vybrana-polozka"><span class="jmeno">' + h(q.text) + '</span>' + cisla + '</div></div>';
+      }
+      const cil = 'blok:' + i;
+      karty += '<section class="karta">' +
+        '<div class="karta-radek"><h2>' + h(b.cinnost || 'Chvíle') + '</h2><button type="button" class="tlacitko obrys male-t" data-akce="blokNehodnotit" data-index="' + i + '">Vynechat</button></div>' +
+        '<p class="tlumene male">' + h(popisBloku(b)) + '</p>' +
+        '<span class="panel-nadpis">Jaká chvíle to pro Tebe byla?</span>' +
+        '<div class="skala" role="group" aria-label="Od −3 do +3">' + skala + '</div>' +
+        '<div class="skala-popisky"><span>velmi nepříjemná</span><span>ani tak, ani tak</span><span>velmi příjemná</span></div>' +
+        '<label class="panel-nadpis" for="blok-text-' + i + '">Co jsi při tom ' + tvar('cítila', 'cítil') + '? Vlastními slovy</label>' +
+        '<div class="pole"><textarea id="blok-text-' + i + '" rows="2" data-blok-text="' + i + '">' + h(b.text) + '</textarea>' +
+          (tlacitkoDiktovani(cil) ? '<div class="pole-radek"><span></span>' + tlacitkoDiktovani(cil) + '</div>' : '') + '</div>' +
+        '<span class="panel-nadpis">Jak smysluplné to pro Tebe bylo? (0 vůbec, 6 velmi)</span>' + smysl +
+        '<details class="karta" data-cast="vyzkum-' + i + '" style="padding:12px"' + (Object.keys(b.vyzkum).length ? ' open' : '') + '><summary>Pro výzkum (nepovinné)</summary>' +
+          '<p class="tlumene male">Jak silně jsi ' + tvar('cítila', 'cítil') + '… (0 vůbec, 6 velmi silně)</p><div class="vybrane">' + vyzkum + '</div></details>' +
+      '</section>';
+    });
+    const ostatni = v.bloky.map((b, i) => ({ b, i })).filter(x => !x.b.hodnotit);
+    const dalsi = ostatni.length
+      ? '<section class="karta"><h2>Chceš popsat i další chvíle?</h2><div class="cipy">' +
+        ostatni.map(({ b, i }) => '<button type="button" class="cip" data-akce="blokHodnotit" data-index="' + i + '">' + h(b.cinnost || 'blok ' + (i + 1)) + ' · ' + h(delkaText(b.delkaMin)) + '</button>').join('') +
+        '</div></section>' : '';
+    return hlavickaVecera(nazevDneVecera(), '#/vecer/' + v.datum) +
+      '<main class="obsah">' +
+        '<div><h1 style="font-size:26px">Pár chvil z Tvého dne</h1><p class="tlumene">Nabízím ty nejdelší. Kteroukoli můžeš vynechat nebo přidat jinou.</p></div>' +
+        karty + dalsi +
+      '</main>' +
+      '<footer class="spodni-lista">' +
+        '<button type="button" class="tlacitko obrys" data-akce="vecerZpet">Zpět</button>' +
+        '<button type="button" class="tlacitko" data-akce="vecerUlozit">Takhle to stačí</button>' +
+      '</footer>';
+  }
+
+  // ---- 3. barva dne ----
+  if (v.krok === 'barva') {
+    const den = (await U.nactiDen(v.datum)) || {};
+    const vzorky = BARVY_DNE.map(b => '<button type="button" class="vzorek" data-akce="barvaDne" data-datum="' + v.datum + '" data-barva="' + b +
+      '" aria-pressed="' + (den.barva === b) + '" aria-label="Barva ' + b + '" style="background:' + b + ';color:' + inkoustPro(b) + '">' +
+      (den.barva === b ? '✓' : '') + '</button>').join('');
+    return hlavickaVecera(nazevDneVecera(), '#/vecer/' + v.datum) +
+      '<main class="obsah"><section class="karta"><h1 style="font-size:26px">Jakou barvu měl Tvůj den?</h1>' +
+        '<div class="vzorky">' + vzorky + '</div>' +
+        '<div class="odkazy"><label class="tlacitko obrys male-t" style="cursor:pointer">Jiná barva…' +
+          '<input type="color" class="skryte" data-akce="barvaVlastni" data-datum="' + v.datum + '" value="' + (den.barva || '#72B97F') + '"></label>' +
+          (den.barva ? '<button type="button" class="tlacitko obrys male-t" data-akce="barvaDne" data-datum="' + v.datum + '" data-barva="">Bez barvy</button>' : '') +
+        '</div></section></main>' +
+      '<footer class="spodni-lista">' +
+        '<button type="button" class="tlacitko obrys" data-akce="vecerShrnuti">Přeskočit</button>' +
+        '<button type="button" class="tlacitko" data-akce="vecerShrnuti">Dál</button>' +
+      '</footer>';
+  }
+
+  // ---- 4. shrnutí ----
+  const den = (await U.nactiDen(v.datum)) || {};
+  const celkem = v.bloky.reduce((s, b) => s + (b.delkaMin || 0), 0);
+  const hodnocene = v.bloky.filter(b => b.hodnotit && b.prijemnost != null);
+  const cas = { prijemny: 0, neutralni: 0, neprijemny: 0 };
+  for (const b of hodnocene) {
+    const k = b.prijemnost > 0 ? 'prijemny' : b.prijemnost < 0 ? 'neprijemny' : 'neutralni';
+    cas[k] += b.delkaMin || 0;
+  }
+  const hodiny = m => m >= 60 ? (Math.round(m / 6) / 10).toString().replace('.', ',') + ' h' : m + ' min';
+  const motiv = nastaveni.barva_dne_zapnuta && den.barva ? ' style="background:' + den.barva + ';color:' + inkoustPro(den.barva) + ';border-color:' + den.barva + '"' : '';
+  const radkyChvil = hodnocene.map(b => '<li>' + h(b.cinnost || 'chvíle') + ': ' + (b.prijemnost > 0 ? '+' + b.prijemnost : b.prijemnost) +
+    (b.text.trim() ? ' – „' + h(b.text.trim().slice(0, 60)) + (b.text.trim().length > 60 ? '…' : '') + '“' : '') + '</li>').join('');
+
+  // Co ještě jde doplnit
+  const nabidka = [];
+  if (v.bloky.some(b => !b.hodnotit)) nabidka.push(['chvile', 'Popsat další chvíle']);
+  // Co už k tomuto dni doplněné je, znovu nenabízíme.
+  const doplneni = (await U.vsechnyZaznamy()).filter(z => z.typ === 'vecerni' && z.poradi == null && z.chvile_od.slice(0, 10) === v.datum);
+  if (!doplneni.some(z => z.telo.length)) nabidka.push(['telo', 'Co se dnes dělo v těle']);
+  if (!doplneni.some(z => z.potreby.length)) nabidka.push(['potreby', 'Jak plné jsou teď Tvoje skleničky']);
+  if (!doplneni.some(z => z.strategie || z.prosba)) nabidka.push(['pomuze', 'Co by Ti teď mohlo udělat dobře']);
+
+  return hlavickaVecera(nazevDneVecera(), '#/domov') +
+    '<main class="obsah">' +
+      '<h1>Tvůj den</h1>' +
+      '<section class="karta"' + motiv + '>' +
+        '<p>' + v.bloky.length + ' ' + (v.bloky.length === 1 ? 'blok' : v.bloky.length < 5 ? 'bloky' : 'bloků') + (celkem ? ', zhruba ' + hodiny(celkem) : '') + '.</p>' +
+        (hodnocene.length ? '<p>Z popsaných chvil: příjemný čas ' + hodiny(cas.prijemny) + ', neutrální ' + hodiny(cas.neutralni) + ', nepříjemný ' + hodiny(cas.neprijemny) + '.</p>' +
+          '<ul style="margin:0;padding-left:20px">' + radkyChvil + '</ul>' : '<p>Chvíle zatím nejsou popsané.</p>') +
+      '</section>' +
+      '<p class="tlumene male">Uloženo jen v tomto telefonu. Není to hodnocení – jen obrázek dne.</p>' +
+      (nabidka.length ? '<section class="karta"><h2>Chceš zaznamenat ještě něco dalšího?</h2><div class="cipy">' +
+        nabidka.map(([cast, text]) => '<button type="button" class="cip" data-akce="vecerDoplnit" data-cast="' + cast + '">' + h(text) + '</button>').join('') +
+      '</div></section>' : '') +
+      '<a class="tlacitko obrys" href="#/domov" style="align-self:flex-start">Pro teď to stačí</a>' +
+    '</main>';
+}
+
 // ---------------- DETAIL ZÁZNAMU ----------------
 async function obrazovkaDetail(id) {
   const z = await U.nactiZaznam(id);
@@ -630,7 +1035,7 @@ async function obrazovkaDetail(id) {
 
   return '<header class="hlavicka">' +
       '<a class="ikona-tlacitko bez-okraje" href="#/domov" aria-label="Zpět na Domov">' + IKONA.zpet + '</a>' +
-      '<span class="nazev-obrazovky">Záznam · ' + h(casZaznamu(z.chvile_od)) + '</span></header>' +
+      '<span class="nazev-obrazovky">Záznam · ' + h(popisCasu(z)) + '</span></header>' +
     '<main class="obsah">' +
       '<section class="karta">' +
         radek('Jaká byla chvíle', prijemnost) +
@@ -640,6 +1045,8 @@ async function obrazovkaDetail(id) {
         radek('V těle', telo) +
         (potreby ? '<div style="display:flex;flex-direction:column;gap:6px"><span class="panel-nadpis">Potřeby</span>' + potreby + '</div>' : '') +
         radek('Kolem', kolem) +
+        radek('Jak dlouho', z.chvile_delka_min ? h((S.DELKY.find(x => x.min === z.chvile_delka_min) || {}).text || z.chvile_delka_min + ' min') : '') +
+        radek('Jak smysluplné to bylo', z.smysluplnost != null ? z.smysluplnost + ' z 6' : '') +
         radek('Co by mi mohlo udělat dobře', h(z.strategie)) +
         radek('Prosba', h(z.prosba)) +
         radek('Pro výzkum', vyzkum) +
@@ -655,6 +1062,8 @@ function konceptZeZaznamu(z) {
   const k = novyKoncept();
   Object.assign(k, {
     id: z.id, vytvoreno: z.vytvoreno, upraveno: z.upraveno, ulozeno: true,
+    typ: z.typ || 'okamzity', chvileOd: z.typ === 'vecerni' ? z.chvile_od : null,
+    poradi: z.poradi ?? null, delkaMin: z.chvile_delka_min ?? null, smysluplnost: z.smysluplnost ?? null,
     prijemnost: z.prijemnost, text: z.vlastni_slova || '',
     zdroj: { psano: z.zdroj_textu === 'psano' || z.zdroj_textu === 'obe', diktovano: z.zdroj_textu === 'diktovano' || z.zdroj_textu === 'obe' },
     strategie: z.strategie || '', prosba: z.prosba || '',
@@ -837,6 +1246,51 @@ function obrazovkaPomoc() {
     '</main>';
 }
 
+// ---------------- PŘIPOMÍNKA DO KALENDÁŘE ----------------
+// Webová aplikace bez serveru neumí spolehlivě posílat upozornění,
+// proto připomínku vytvoříme v kalendáři telefonu (opakuje se denně).
+
+function adresaVecera() { return location.origin + location.pathname + '#/vecer'; }
+
+function casyPripominky() {
+  const [hod, min] = (nastaveni.pripominka_cas || '19:30').split(':').map(Number);
+  const zacatek = new Date(); zacatek.setHours(hod, min, 0, 0);
+  const konec = new Date(zacatek.getTime() + 10 * 60000);
+  const f = d => U.tedS(d).slice(0, 19).replace(/[-:]/g, ''); // 20261106T193000
+  return { od: f(zacatek), do: f(konec) };
+}
+
+function odkazGoogleKalendar() {
+  const c = casyPripominky();
+  const parametry = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: 'Mám se! – večerní ohlédnutí',
+    details: 'Jaký byl Tvůj den? ' + adresaVecera(),
+    dates: c.od + '/' + c.do,
+    ctz: 'Europe/Prague',
+    recur: 'RRULE:FREQ=DAILY'
+  });
+  return 'https://calendar.google.com/calendar/render?' + parametry.toString();
+}
+
+function souborIcs() {
+  const c = casyPripominky();
+  const radky = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Mam se//CS', 'BEGIN:VEVENT',
+    'UID:mamse-vecer-' + Date.now() + '@mamse',
+    'DTSTAMP:' + new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z',
+    'DTSTART;TZID=Europe/Prague:' + c.od,
+    'DTEND;TZID=Europe/Prague:' + c.do,
+    'RRULE:FREQ=DAILY',
+    'SUMMARY:Mám se! – večerní ohlédnutí',
+    'DESCRIPTION:Jaký byl Tvůj den? ' + adresaVecera(),
+    'URL:' + adresaVecera(),
+    'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:Večerní ohlédnutí', 'TRIGGER:PT0M', 'END:VALARM',
+    'END:VEVENT', 'END:VCALENDAR'
+  ];
+  return radky.join('\r\n');
+}
+
 // ---------------- NASTAVENÍ ----------------
 async function obrazovkaNastaveni() {
   const n = nastaveni;
@@ -868,6 +1322,16 @@ async function obrazovkaNastaveni() {
         volba('oba', '„byla/byl“ – oba tvary') + volba('zensky', '„byla“') + volba('muzsky', '„byl“') + '</section>' +
       '<section class="karta"><h2>Blízcí lidé pro případ nouze</h2><p class="tlumene male">Ukážou se na obrazovce Pomoc s připravenou zprávou. Zůstávají jen v tomto telefonu.</p>' +
         kontakty + pridatKontakt + '</section>' +
+      '<section class="karta"><h2>Připomínka večerního ohlédnutí</h2>' +
+        '<p class="tlumene male">Aplikace sama připomínat neumí, proto si připomínku dáš do kalendáře. Odkaz v ní otevře rovnou večerní ohlédnutí.</p>' +
+        '<label class="panel-nadpis" for="cas-pripominky">V kolik?</label>' +
+        '<input class="vstup" type="time" id="cas-pripominky" data-akce="casPripominky" value="' + h(n.pripominka_cas) + '" style="max-width:160px">' +
+        '<div class="odkazy"><a class="tlacitko male-t" href="' + h(odkazGoogleKalendar()) + '" target="_blank" rel="noopener">Přidat do Google Kalendáře</a>' +
+        '<button type="button" class="tlacitko obrys male-t" data-akce="stahnoutIcs">Jiný kalendář (.ics)</button></div>' +
+        '<p class="tlumene male">Když čas změníš, přidej připomínku znovu a tu starou v kalendáři smaž.</p></section>' +
+      '<section class="karta"><h2>Barva dne</h2>' +
+        '<label class="prepinac-maly" style="font-size:15px"><input type="checkbox" data-akce="barvyZapnute"' + (n.barva_dne_zapnuta ? ' checked' : '') + '>Chci si volit barvu dne</label>' +
+        '<p class="tlumene male">Když je vypnutá, aplikace se na barvu neptá a dny ukazuje bez ní. Zvolené barvy zůstanou uložené.</p></section>' +
       '<section class="karta"><h2>Bolest</h2>' +
         '<label class="prepinac-maly" style="font-size:15px"><input type="checkbox" data-akce="chronicka"' + (n.chronicka_bolest ? ' checked' : '') + '>Mám chronickou bolest – neupozorňuj mě na opakovanou bolest</label>' +
         '<h3>Přijatá doporučení</h3>' + doporuceni + '</section>' +
@@ -893,6 +1357,114 @@ const AKCE = {
   novyZaznam() {
     // Nový záznam začne čistý, když ten předchozí nemá obsah nebo už je uložený.
     if (!maObsah(koncept) || koncept.ulozeno) koncept = novyKoncept();
+  },
+  // ---- Večerní ohlédnutí ----
+  blokNovy() { vecer.upravovany = 'novy'; vecer.rozpracovany = novyBlok(); prekresli(); },
+  blokUpravit(d) {
+    const i = +d.index;
+    vecer.upravovany = i;
+    vecer.rozpracovany = Object.assign({}, vecer.bloky[i], { sKym: [...vecer.bloky[i].sKym] });
+    prekresli();
+  },
+  blokCinnost(d) { const b = vecer.rozpracovany; b.cinnost = b.cinnost === d.slovo ? null : d.slovo; prekresli(); },
+  blokVlastniOtevrit() { vecer.vlastniCinnost = true; prekresli(); document.getElementById('vlastni-cinnost')?.focus(); },
+  blokVlastniPridat() {
+    const t = document.getElementById('vlastni-cinnost').value.trim().toLowerCase();
+    if (t) vecer.rozpracovany.cinnost = t;
+    vecer.vlastniCinnost = false;
+    prekresli();
+  },
+  blokDelka(d) { const b = vecer.rozpracovany, m = +d.min; b.delkaMin = b.delkaMin === m ? null : m; prekresli(); },
+  blokSKym(d) {
+    const b = vecer.rozpracovany;
+    b.sKym = b.sKym.includes(d.slovo) ? b.sKym.filter(x => x !== d.slovo) : [...b.sKym, d.slovo];
+    prekresli();
+  },
+  blokKde(d) { const b = vecer.rozpracovany; b.kde = b.kde === d.slovo ? null : d.slovo; prekresli(); },
+  blokHotovo() {
+    const b = vecer.rozpracovany;
+    if (!b.cinnost) { oznam('Vyber, co jsi ' + tvar('dělala', 'dělal') + ' – stačí jedno slovo.'); return; }
+    if (vecer.upravovany === 'novy') vecer.bloky.push(b);
+    else vecer.bloky[vecer.upravovany] = b;
+    vecer.upravovany = null; vecer.rozpracovany = null; vecer.vlastniCinnost = false;
+    prekresli();
+  },
+  blokZrusit() { vecer.upravovany = null; vecer.rozpracovany = null; vecer.vlastniCinnost = false; prekresli(); },
+  blokOdebrat() {
+    const [odebrany] = vecer.bloky.splice(vecer.upravovany, 1);
+    if (odebrany.ulozeny) (vecer.smazane = vecer.smazane || []).push(odebrany.id);
+    vecer.upravovany = null; vecer.rozpracovany = null;
+    prekresli();
+  },
+  vecerDal() {
+    if (vecer.upravovany !== null) { oznam('Nejdřív dokonči rozepsaný blok.'); return; }
+    vyberChvile();
+    vecer.krok = 'chvile';
+    prekresli();
+    window.scrollTo(0, 0);
+  },
+  vecerZpet() { vecer.krok = 'bloky'; prekresli(); window.scrollTo(0, 0); },
+  blokPrijemnost(d) { const b = vecer.bloky[+d.index], x = +d.hodnota; b.prijemnost = b.prijemnost === x ? null : x; prekresli(); },
+  blokSmysl(d) { const b = vecer.bloky[+d.index], x = +d.hodnota; b.smysluplnost = b.smysluplnost === x ? null : x; prekresli(); },
+  blokVyzkum(d) {
+    const b = vecer.bloky[+d.index], x = +d.hodnota;
+    if (b.vyzkum[d.klic] === x) delete b.vyzkum[d.klic]; else b.vyzkum[d.klic] = x;
+    prekresli();
+  },
+  blokHodnotit(d) { vecer.bloky[+d.index].hodnotit = true; prekresli(); },
+  blokNehodnotit(d) { vecer.bloky[+d.index].hodnotit = false; prekresli(); },
+  async vecerUlozit() {
+    if (diktovani) diktovani.stop();
+    await ulozVecer();
+    vecer.krok = nastaveni.barva_dne_zapnuta ? 'barva' : 'shrnuti';
+    prekresli();
+    window.scrollTo(0, 0);
+  },
+  vecerShrnuti() { vecer.krok = 'shrnuti'; prekresli(); window.scrollTo(0, 0); },
+  vecerDoplnit(d) {
+    if (d.cast === 'chvile') {
+      for (const b of vecer.bloky) b.hodnotit = true;
+      vecer.krok = 'chvile';
+      prekresli();
+      window.scrollTo(0, 0);
+      return;
+    }
+    // Tělo, potřeby, co by pomohlo: záznam k celému dni (bez bloku)
+    koncept = novyKoncept();
+    koncept.typ = 'vecerni';
+    koncept.chvileOd = U.tedS(new Date(vecer.datum + 'T00:00:00'));
+    koncept.fokus = d.cast;
+    location.hash = '#/zaznam-dal';
+  },
+
+  async casPripominky(d, el) {
+    if (!el.value) return;
+    nastaveni.pripominka_cas = el.value;
+    nastaveni.pripominka_zapnuta = true;
+    await U.ulozNastaveni(nastaveni);
+    prekresli();
+  },
+  stahnoutIcs() {
+    const soubor = new Blob([souborIcs()], { type: 'text/calendar' });
+    const odkaz = document.createElement('a');
+    odkaz.href = URL.createObjectURL(soubor);
+    odkaz.download = 'mam-se-pripominka.ics';
+    document.body.appendChild(odkaz);
+    odkaz.click();
+    setTimeout(() => { URL.revokeObjectURL(odkaz.href); odkaz.remove(); }, 1000);
+  },
+  async barvaDne(d) {
+    const den = (await U.nactiDen(d.datum)) || { datum: d.datum, barva: null, vecerni_hotovo: false, poznamka: '' };
+    den.barva = d.barva || null;
+    await U.ulozDen(den);
+    prekresli();
+  },
+  async barvaVlastni(d, el) { await AKCE.barvaDne({ datum: d.datum, barva: el.value.toUpperCase() }); },
+  async barvyZapnute(d, el) {
+    nastaveni.barva_dne_zapnuta = el.checked;
+    nastaveni.barva_tydne_zapnuta = el.checked;
+    await U.ulozNastaveni(nastaveni);
+    oznam('Uloženo.');
   },
   slovoUlozit() {
     const { co, slovo } = koncept.upravuji;
@@ -1010,12 +1582,13 @@ const AKCE = {
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
         if (ev.results[i].isFinal) {
           const kus = ev.results[i][0].transcript.trim();
-          koncept[cil] = (koncept[cil] ? koncept[cil].replace(/\s*$/, ' ') : '') + kus;
+          const dosud = hodnotaCile(cil);
+          nastavCil(cil, (dosud ? dosud.replace(/\s*$/, ' ') : '') + kus);
           if (cil === 'text') koncept.zdroj.diktovano = true;
         }
       }
-      const pole = document.getElementById(ID_POLE[cil]);
-      if (pole) pole.value = koncept[cil];
+      const pole = document.getElementById(idPoleCile(cil));
+      if (pole) pole.value = hodnotaCile(cil);
       if (cil === 'text') vykresliPoznana();
     };
     const tentoBeh = diktovani;
@@ -1074,6 +1647,13 @@ const AKCE = {
     koncept.fokus = null;
     posledniKoncept = koncept;
     koncept = null;
+    // Doplnění těla nebo potřeb z večerního ohlédnutí → zpět na shrnutí dne.
+    if (zaznam.typ === 'vecerni' && vecer && vecer.datum === zaznam.chvile_od.slice(0, 10)) {
+      posledniKoncept = null;
+      vecer.krok = 'shrnuti';
+      location.hash = '#/vecer/' + vecer.datum;
+      return;
+    }
     // Kartičku o bolesti nabízíme jen po prvním uložení, ne při každém doplnění.
     if (!doplnuji) doporuceniKUkazani = await mamUkazatBolest() ? 'bolest' : null;
     location.hash = '#/hotovo';
@@ -1175,6 +1755,8 @@ async function vykresli() {
     case 'pomoc':      html = obrazovkaPomoc(); break;
     case 'nastaveni':  html = await obrazovkaNastaveni(); break;
     case 'detail':     html = await obrazovkaDetail(decodeURIComponent(parametr)); break;
+    case 'den':        html = await obrazovkaDen(parametr); break;
+    case 'vecer':      html = await obrazovkaVecer(parametr); break;
     default:           html = await obrazovkaDomov();
   }
   // Rozbalené části zůstanou rozbalené i po překreslení.
@@ -1245,6 +1827,7 @@ app.addEventListener('change', (ev) => {
 // (jinak by klávesnice zmizela uprostřed slova).
 app.addEventListener('input', (ev) => {
   const el = ev.target;
+  if (el.dataset.blokText != null && vecer) { vecer.bloky[+el.dataset.blokText].text = el.value; return; }
   if (!koncept) return;
   if (el.id === 'text') {
     koncept.text = el.value;
@@ -1261,6 +1844,7 @@ app.addEventListener('keydown', (ev) => {
   if (ev.target.id === 'vlastni-emoce') { ev.preventDefault(); AKCE.vlastniEmocePridat(); }
   if (ev.target.id === 'vlastni-potreba') { ev.preventDefault(); AKCE.vlastniPotrebaPridat(); }
   if (ev.target.id === 'uprava-slova') { ev.preventDefault(); AKCE.slovoUlozit(); }
+  if (ev.target.id === 'vlastni-cinnost') { ev.preventDefault(); AKCE.blokVlastniPridat(); }
 });
 
 window.addEventListener('hashchange', vykresli);
