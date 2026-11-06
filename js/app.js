@@ -18,8 +18,10 @@ const app = document.getElementById('app');
 let nastaveni = null;   // nastavení načtené z telefonu
 let koncept = null;     // rozepsaný záznam (zatím jen v paměti)
 let posledni = null;    // naposledy uložený záznam (pro obrazovku Hotovo)
+let posledniKoncept = null; // jeho rozepsaná podoba – aby šel doplnit
 let doporuceniKUkazani = null; // klidná kartička po uložení, pokud se hodí
 let mazaniPotvrzeni = false;   // dvoukrokové mazání všech dat
+let mazaniZaznamu = null;      // id záznamu, u kterého se ptáme „opravdu smazat?“
 let diktovani = null;          // běžící diktování (pokud ho telefon umí)
 
 // ---------------------------------------------------------------------
@@ -72,6 +74,7 @@ const IKONA = {
   srdce: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>',
   tuzka: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1-4L16 5l3 3L8 19l-4 1zM14 7l3 3"/></svg>',
   mikrofon: '<svg class="mikrofon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
+  fotak: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
   domov: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/></svg>',
   prehled: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',
   nastaveni: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>'
@@ -149,6 +152,7 @@ function novyKoncept() {
     sKym: [],
     kde: null,
     vyzkum: {},           // { klic: 0–6 }
+    fotka: null,          // zmenšená fotka (Blob) nebo nic
     strategie: '',
     prosba: ''
   };
@@ -156,7 +160,7 @@ function novyKoncept() {
 
 function maObsah(k) {
   return k && (k.prijemnost != null || k.text.trim() || Object.keys(k.emoce).length ||
-    Object.keys(k.telo).length || Object.keys(k.potreby).length);
+    Object.keys(k.telo).length || Object.keys(k.potreby).length || k.fotka);
 }
 
 // Z rozepsaného záznamu udělá záznam podle datového modelu.
@@ -172,7 +176,7 @@ function sestavZaznam(k) {
     id: k.id,
     typ: 'okamzity',
     vytvoreno: k.vytvoreno,
-    upraveno: null,
+    upraveno: k.upraveno || null,
     chvile_od: k.vytvoreno,
     chvile_delka_min: null,
     prijemnost: k.prijemnost,
@@ -206,6 +210,7 @@ function sestavZaznam(k) {
       ? Object.fromEntries(S.VYZKUM.map(v => [v.klic, k.vyzkum[v.klic] ?? null]))
       : null,
     zdroj_textu: zdroj,
+    fotka: k.fotka || null,
     verze_protokolu: S.VERZE_PROTOKOLU
   };
 }
@@ -274,13 +279,13 @@ async function obrazovkaDomov() {
     const trida = p == null ? '' : p > 0 ? ' prijemna' : p < 0 ? ' neprijemna' : '';
     const popis = z.emoce.length
       ? z.emoce.map(e => e.slovo + (e.intenzita != null ? ' ' + e.intenzita : '')).join(', ')
-      : (z.vlastni_slova ? z.vlastni_slova.slice(0, 80) + (z.vlastni_slova.length > 80 ? '…' : '') : 'bez slov');
-    seznam += '<div class="zaznam-radek"><span class="znamka' + trida + '" aria-label="Příjemnost ' + (p ?? 'nevyplněna') + '">' +
+      : (z.vlastni_slova ? z.vlastni_slova.slice(0, 80) + (z.vlastni_slova.length > 80 ? '…' : '') : (z.fotka ? '' : 'bez slov'));
+    seznam += '<a class="zaznam-radek" href="#/detail/' + encodeURIComponent(z.id) + '"><span class="znamka' + trida + '" aria-label="Příjemnost ' + (p ?? 'nevyplněna') + '">' +
       (p == null ? '–' : p > 0 ? '+' + p : p) + '</span><div><div class="tlumene male">' + casZaznamu(z.chvile_od) +
-      '</div><div>' + h(popis) + '</div></div></div>';
+      '</div><div>' + h(popis) + (z.fotka ? ' <span class="tlumene">· fotka</span>' : '') + '</div></div><span class="sipka" aria-hidden="true">›</span></a>';
   }
 
-  const rozepsano = maObsah(koncept)
+  const rozepsano = maObsah(koncept) && !koncept.ulozeno
     ? '<a class="tlacitko jemne" href="#/zaznam">Pokračovat v rozepsaném záznamu</a>' : '';
 
   return '<header class="hlavicka"><div class="znacka"><img src="ikony/logo.svg" alt="">Mám se!</div>' +
@@ -382,6 +387,7 @@ function obrazovkaZaznam() {
             (umiDiktovat ? 'Diktování zpracovává Google. Můžeš použít i mikrofon na klávesnici.' : 'Diktovat můžeš mikrofonem na klávesnici.') +
           '</span>' + diktTlacitko + '</div>' +
         '</div>' +
+        blokFotky(k) +
         '<div id="poznana"></div>' +
         '<p class="tlumene">Nebo vyber z návrhů:</p>' +
         '<div class="cipy">' + zakladni + '</div>' + vlastni + presnejsi +
@@ -483,29 +489,163 @@ function obrazovkaZaznamDal() {
       '<a class="tlacitko obrys male-t" href="#/pomoc">' + IKONA.srdce + 'Pomoc</a>' +
     '</header>' +
     '<main class="obsah">' +
-      '<p class="tlumene">Všechno tady je nepovinné. Vyplň, co Ti dává smysl.</p>' +
-      '<details class="karta"' + (Object.keys(k.telo).length ? ' open' : '') + '><summary>Co cítíš v těle?</summary>' +
-        telo + (teloVybrane ? '<div class="vybrane">' + teloVybrane + '</div>' : '') + bolest + '</details>' +
-      '<details class="karta"' + (Object.keys(k.potreby).length || k.otevrenaSkupina ? ' open' : '') + '><summary>Co je teď živé? (potřeby)</summary>' +
-        '<p class="tlumene male">Návrhy podle Max-Neefa. Sklenička ukazuje, kolik té potřeby teď máš: 0 prázdná, 4 plná. Skřípnutá potřeba dostane prasklinu – i plná sklenička může prasknout.</p>' +
-        '<div class="cipy">' + skupiny + '</div>' + vlastniPotreba + potrebyPanel +
-        (sklenicky ? '<div class="vybrane">' + sklenicky + '</div>' : '') + '</details>' +
-      '<details class="karta"' + (k.cinnost.length || k.sKym.length || k.kde ? ' open' : '') + '><summary>Co se děje kolem?</summary>' +
-        '<span class="panel-nadpis">Co právě děláš?</span><div class="cipy">' + cinnosti + '</div>' +
-        '<span class="panel-nadpis">S kým?</span><div class="cipy">' + skym + '</div>' +
-        '<span class="panel-nadpis">Kde?</span><div class="cipy">' + kde + '</div></details>' +
-      '<details class="karta"' + (k.strategie || k.prosba ? ' open' : '') + '><summary>Co by Ti teď mohlo udělat dobře?</summary>' +
-        '<div class="pole"><textarea rows="2" data-pole="strategie" aria-label="Co by Ti teď mohlo udělat dobře?" placeholder="Třeba procházka, napsat kamarádce, chvíli ticha…">' + h(k.strategie) + '</textarea></div>' +
-        '<label class="panel-nadpis" for="prosba">Chceš o něco konkrétního požádat – sebe nebo někoho jiného?</label>' +
-        '<div class="pole"><textarea id="prosba" rows="2" data-pole="prosba">' + h(k.prosba) + '</textarea></div></details>' +
-      '<details class="karta"' + (Object.keys(k.vyzkum).length ? ' open' : '') + '><summary>Pro výzkum (nepovinné)</summary>' +
-        '<p class="tlumene male">Devět stejných otázek pokaždé – z nich se počítá klasický U-index. Jak moc teď cítíš… (0 vůbec, 6 velmi silně). Druhé klepnutí odpověď zruší.</p>' +
-        '<div class="vybrane">' + vyzkum + '</div></details>' +
+      (k.fokus ? '' : '<p class="tlumene">Všechno tady je nepovinné. Vyplň, co Ti dává smysl.</p>') +
+      vyberCasti(k, [
+        ['telo', Object.keys(k.telo).length, 'Co cítíš v těle?',
+          telo + (teloVybrane ? '<div class="vybrane">' + teloVybrane + '</div>' : '') + bolest],
+        ['potreby', Object.keys(k.potreby).length || k.otevrenaSkupina, 'Co je teď živé? (potřeby)',
+          '<p class="tlumene male">Návrhy podle Max-Neefa. Sklenička ukazuje, kolik té potřeby teď máš: 0 prázdná, 4 plná. Skřípnutá potřeba dostane prasklinu – i plná sklenička může prasknout.</p>' +
+          '<div class="cipy">' + skupiny + '</div>' + vlastniPotreba + potrebyPanel +
+          (sklenicky ? '<div class="vybrane">' + sklenicky + '</div>' : '')],
+        ['kolem', k.cinnost.length || k.sKym.length || k.kde, 'Co se děje kolem?',
+          '<span class="panel-nadpis">Co právě děláš?</span><div class="cipy">' + cinnosti + '</div>' +
+          '<span class="panel-nadpis">S kým?</span><div class="cipy">' + skym + '</div>' +
+          '<span class="panel-nadpis">Kde?</span><div class="cipy">' + kde + '</div>'],
+        ['pomuze', k.strategie || k.prosba, 'Co by Ti teď mohlo udělat dobře?',
+          '<div class="pole"><textarea rows="2" data-pole="strategie" aria-label="Co by Ti teď mohlo udělat dobře?" placeholder="Třeba procházka, napsat kamarádce, chvíli ticha…">' + h(k.strategie) + '</textarea></div>' +
+          '<label class="panel-nadpis" for="prosba">Chceš o něco konkrétního požádat – sebe nebo někoho jiného?</label>' +
+          '<div class="pole"><textarea id="prosba" rows="2" data-pole="prosba">' + h(k.prosba) + '</textarea></div>'],
+        ['vyzkum', Object.keys(k.vyzkum).length, 'Pro výzkum (nepovinné)',
+          '<p class="tlumene male">Devět stejných otázek pokaždé – z nich se počítá klasický U-index. Jak moc teď cítíš… (0 vůbec, 6 velmi silně). Druhé klepnutí odpověď zruší.</p>' +
+          '<div class="vybrane">' + vyzkum + '</div>']
+      ]) +
     '</main>' +
     '<footer class="spodni-lista">' +
-      '<a class="tlacitko obrys" href="#/zaznam">Zpět</a>' +
+      (k.fokus ? '<a class="tlacitko obrys" href="#/hotovo">Zpět</a>' : '<a class="tlacitko obrys" href="#/zaznam">Zpět</a>') +
       '<button type="button" class="tlacitko" data-akce="ulozit">Uložit</button>' +
     '</footer>';
+}
+
+// ---------------- FOTKA ----------------
+// Fotka se jen ukládá a ukazuje, nic se z ní nevyhodnocuje.
+// Před uložením ji zmenšíme (šetří místo v telefonu) a tím se z ní
+// zároveň odstraní skryté údaje, třeba místo, kde byla pořízena.
+
+const MAX_STRANA = 1280;
+const urlCache = new WeakMap(); // abychom pro stejnou fotku nedělali adresu pořád znovu
+
+function urlFotky(blob) {
+  if (!urlCache.has(blob)) urlCache.set(blob, URL.createObjectURL(blob));
+  return urlCache.get(blob);
+}
+
+async function zmensiFotku(soubor) {
+  const obrazek = await createImageBitmap(soubor, { imageOrientation: 'from-image' });
+  const pomer = Math.min(1, MAX_STRANA / Math.max(obrazek.width, obrazek.height));
+  const platno = document.createElement('canvas');
+  platno.width = Math.round(obrazek.width * pomer);
+  platno.height = Math.round(obrazek.height * pomer);
+  platno.getContext('2d').drawImage(obrazek, 0, 0, platno.width, platno.height);
+  return new Promise(hotovo => platno.toBlob(hotovo, 'image/jpeg', 0.82));
+}
+
+function blokFotky(k) {
+  if (k.fotka) {
+    return '<div class="fotka-nahled"><img src="' + urlFotky(k.fotka) + '" alt="Připojená fotka">' +
+      '<button type="button" class="tlacitko obrys male-t" data-akce="fotkaOdebrat">Odebrat fotku</button></div>';
+  }
+  return '<label class="tlacitko obrys male-t" style="align-self:flex-start;cursor:pointer">' + IKONA.fotak + 'Přidat fotku' +
+    '<input type="file" accept="image/*" data-akce="fotkaPridat" class="skryte"></label>';
+}
+
+// ---------------- DETAIL ZÁZNAMU ----------------
+async function obrazovkaDetail(id) {
+  const z = await U.nactiZaznam(id);
+  if (!z) return '<main class="obsah"><h1>Záznam nenalezen</h1><a class="tlacitko" href="#/domov">Domů</a></main>';
+
+  const radek = (nadpis, obsah) => obsah ? '<div style="display:flex;flex-direction:column;gap:4px"><span class="panel-nadpis">' + nadpis + '</span><div>' + obsah + '</div></div>' : '';
+  const sila = v => v != null ? ' <span class="tlumene">' + v + '/6</span>' : '';
+  const prijemnost = z.prijemnost == null ? '' : (z.prijemnost > 0 ? '+' + z.prijemnost : String(z.prijemnost));
+  const smery = Object.fromEntries(S.SMER_HNEVU.map(x => [x.kod, x.text]));
+
+  const emoce = z.emoce.map(e => h(e.slovo) + sila(e.intenzita) +
+    (e.smer ? ' <span class="tlumene">(' + h(smery[e.smer] || e.smer) + ')</span>' : '') +
+    (e.pod_tim ? ' <span class="tlumene">· pod tím: ' + h(e.pod_tim) + '</span>' : '')).join('<br>');
+  const telo = z.telo.map(t => h(t.pocit) + sila(t.intenzita) +
+    (t.kde ? ' <span class="tlumene">· ' + h(t.kde) + '</span>' : '') +
+    (t.upresneni ? '<br><span class="tlumene">„' + h(t.upresneni) + '“</span>' : '')).join('<br>');
+  const potreby = z.potreby.map(p => '<div class="sklenicka-radek">' + sklenicka(p.naplneni, p.skripnuta) +
+    '<span class="jmeno">' + h(p.potreba) + '</span><span class="tlumene male">' +
+    (p.naplneni != null ? p.naplneni + ' ze 4' : '') + (p.skripnuta ? ' · skřípnutá' : '') + '</span></div>').join('');
+  const kolem = [z.cinnost.join(', '), z.s_kym.join(', '), z.kde].filter(Boolean).map(h).join('<br>');
+  const vyzkum = z.vyzkum ? S.VYZKUM.filter(v => z.vyzkum[v.klic] != null).map(v => h(v.text) + ': ' + z.vyzkum[v.klic]).join(' · ') : '';
+
+  const mazani = mazaniZaznamu === z.id
+    ? '<p>Opravdu smazat tento záznam? Vrátit to půjde jen ze zálohy.</p><div class="odkazy"><button type="button" class="tlacitko male-t" data-akce="smazatZaznamAno" data-id="' + h(z.id) + '">Ano, smazat</button>' +
+      '<button type="button" class="tlacitko obrys male-t" data-akce="smazatZaznamNe">Ne, nechat</button></div>'
+    : '<button type="button" class="tlacitko obrys male-t" style="align-self:flex-start" data-akce="smazatZaznam" data-id="' + h(z.id) + '">Smazat záznam</button>';
+
+  return '<header class="hlavicka">' +
+      '<a class="ikona-tlacitko bez-okraje" href="#/domov" aria-label="Zpět na Domov">' + IKONA.zpet + '</a>' +
+      '<span class="nazev-obrazovky">Záznam · ' + h(casZaznamu(z.chvile_od)) + '</span></header>' +
+    '<main class="obsah">' +
+      '<section class="karta">' +
+        radek('Jaká byla chvíle', prijemnost) +
+        (z.fotka ? '<img class="fotka-velka" src="' + urlFotky(z.fotka) + '" alt="Fotka u záznamu">' : '') +
+        radek('Vlastními slovy', z.vlastni_slova ? h(z.vlastni_slova).replace(/\n/g, '<br>') : '') +
+        radek('Emoce', emoce) +
+        radek('V těle', telo) +
+        (potreby ? '<div style="display:flex;flex-direction:column;gap:6px"><span class="panel-nadpis">Potřeby</span>' + potreby + '</div>' : '') +
+        radek('Kolem', kolem) +
+        radek('Co by mi mohlo udělat dobře', h(z.strategie)) +
+        radek('Prosba', h(z.prosba)) +
+        radek('Pro výzkum', vyzkum) +
+        (z.upraveno ? '<p class="tlumene male">Doplněno ' + h(casZaznamu(z.upraveno)) + '</p>' : '') +
+      '</section>' +
+      '<button type="button" class="tlacitko" style="align-self:flex-start" data-akce="upravitZaznam" data-id="' + h(z.id) + '">Doplnit nebo upravit</button>' +
+      mazani +
+    '</main>';
+}
+
+// Uložený záznam zpět do rozepsané podoby (aby šel doplnit nebo upravit).
+function konceptZeZaznamu(z) {
+  const k = novyKoncept();
+  Object.assign(k, {
+    id: z.id, vytvoreno: z.vytvoreno, upraveno: z.upraveno, ulozeno: true,
+    prijemnost: z.prijemnost, text: z.vlastni_slova || '',
+    zdroj: { psano: z.zdroj_textu === 'psano' || z.zdroj_textu === 'obe', diktovano: z.zdroj_textu === 'diktovano' || z.zdroj_textu === 'obe' },
+    strategie: z.strategie || '', prosba: z.prosba || '',
+    cinnost: [...(z.cinnost || [])], sKym: [...(z.s_kym || [])], kde: z.kde || null
+  });
+  for (const e of z.emoce) {
+    k.emoce[e.slovo] = { intenzita: e.intenzita };
+    if (e.smer) k.smer = e.smer;
+    if (e.pod_tim) { k.podTim = e.pod_tim.split(', '); k.podTimOtevreno = true; }
+  }
+  for (const t of z.telo) {
+    k.telo[t.pocit] = { intenzita: t.intenzita };
+    if (t.pocit === 'bolest' && (t.kde || t.upresneni)) {
+      k.bolestUpresnit = true;
+      k.bolestKde = t.kde ? t.kde.split(', ') : [];
+      k.bolestSlova = t.upresneni || '';
+    }
+  }
+  k.fotka = z.fotka || null;
+  for (const p of z.potreby) k.potreby[p.potreba] = { naplneni: p.naplneni, skripnuta: p.skripnuta };
+  if (z.vyzkum) for (const [klic, v] of Object.entries(z.vyzkum)) if (v != null) k.vyzkum[klic] = v;
+  return k;
+}
+
+// Části druhého kroku. Při doplňování (k.fokus) ukážeme jen tu jednu, rozbalenou.
+function vyberCasti(k, casti) {
+  return casti
+    .filter(([klic]) => !k.fokus || k.fokus === klic)
+    .map(([klic, vyplneno, nadpis, obsah]) =>
+      '<details class="karta"' + (vyplneno || k.fokus === klic ? ' open' : '') + '><summary>' + nadpis + '</summary>' + obsah + '</details>')
+    .join('');
+}
+
+// Které části záznamu ještě nejsou vyplněné (pro nabídku po uložení).
+function chybejiciCasti(k) {
+  const chybi = [];
+  if (k.prijemnost == null || (!Object.keys(k.emoce).length && !k.text.trim())) chybi.push(['zaklad', 'Jaká je chvíle a co cítíš']);
+  if (!Object.keys(k.telo).length) chybi.push(['telo', 'Co cítíš v těle']);
+  if (!Object.keys(k.potreby).length) chybi.push(['potreby', 'Co je teď živé (potřeby)']);
+  if (!k.cinnost.length && !k.sKym.length && !k.kde) chybi.push(['kolem', 'Co se děje kolem']);
+  if (!k.strategie.trim() && !k.prosba.trim()) chybi.push(['pomuze', 'Co by Ti teď mohlo udělat dobře']);
+  if (!k.fotka) chybi.push(['fotka', 'Fotka']);
+  if (!Object.keys(k.vyzkum).length) chybi.push(['vyzkum', 'Pro výzkum']);
+  return chybi;
 }
 
 // ---------------- HOTOVO ----------------
@@ -516,6 +656,14 @@ function obrazovkaHotovo() {
   if (z.prijemnost != null) casti.push('chvíle ' + (z.prijemnost > 0 ? '+' + z.prijemnost : z.prijemnost));
   if (z.emoce.length) casti.push(z.emoce.map(e => e.slovo).join(', '));
   if (z.potreby.length) casti.push(z.potreby.length + ' ' + (z.potreby.length === 1 ? 'potřeba' : 'potřeby'));
+
+  // Nabídka částí, které v tomto záznamu ještě nejsou vyplněné.
+  const chybi = posledniKoncept ? chybejiciCasti(posledniKoncept) : [];
+  const dalsiNabidka = chybi.length
+    ? '<section class="karta"><h2>Chceš zaznamenat ještě něco dalšího?</h2><div class="cipy">' +
+      chybi.map(([cast, text]) => '<button type="button" class="cip" data-akce="doplnit" data-cast="' + cast + '">' + h(text) + '</button>').join('') +
+      '</div><p class="tlumene male">Doplní se do stejného záznamu.</p></section>'
+    : '';
 
   let karta = '';
   if (doporuceniKUkazani === 'bolest') {
@@ -534,7 +682,8 @@ function obrazovkaHotovo() {
       (casti.length ? '<p class="tlumene">' + h(casti.join(' · ')) + '</p>' : '') +
       '<p class="tlumene male">Záznam je jen v tomto telefonu.</p>' +
       karta +
-      '<div class="odkazy"><a class="tlacitko" href="#/domov">Domů</a><a class="tlacitko obrys" href="#/zaznam" data-akce="novyZaznam">Další záznam</a></div>' +
+      dalsiNabidka +
+      '<a class="tlacitko obrys" href="#/domov" style="align-self:flex-start">Pro teď to stačí</a>' +
     '</main>';
 }
 
@@ -656,20 +805,20 @@ async function obrazovkaNastaveni() {
   const doporuceni = odkliknuta.length
     ? odkliknuta.map(d => '<div class="kontakt"><span>' + h(d.co === 'zachranka' ? 'Doporučení aplikace Záchranka' : d.co) + ' – ' +
         (d.stav === 'uz_mam' ? '„Už ji mám“' : '„Neukazovat znovu“') + '</span><div class="odkazy"><button type="button" class="tlacitko obrys male-t" data-akce="vratitDoporuceni" data-co="' + h(d.co) + '">Zase ukazovat</button></div></div>').join('')
-    : '<p class="tlumene male">Žádné doporučení není odkliknuté.</p>';
+    : '<p class="tlumene male">Zatím žádné přijaté doporučení.</p>';
 
   return '<header class="hlavicka">' +
       '<a class="ikona-tlacitko bez-okraje" href="#/domov" aria-label="Zpět na Domov">' + IKONA.zpet + '</a>' +
       '<span class="nazev-obrazovky">Nastavení</span></header>' +
     '<main class="obsah">' +
-      '<section class="karta"><h2>Oslovení</h2><p class="tlumene male">Jak Tě má aplikace oslovovat.</p>' +
+      '<section class="karta"><h2>Oslovení</h2><p class="tlumene male">Jaký tvar sloves preferuješ?</p>' +
         volba('oba', '„byla/byl“ – oba tvary') + volba('zensky', '„byla“') + volba('muzsky', '„byl“') + '</section>' +
       '<section class="karta"><h2>Blízcí lidé pro případ nouze</h2><p class="tlumene male">Ukážou se na obrazovce Pomoc s připravenou zprávou. Zůstávají jen v tomto telefonu.</p>' +
         kontakty + pridatKontakt + '</section>' +
       '<section class="karta"><h2>Bolest</h2>' +
         '<label class="prepinac-maly" style="font-size:15px"><input type="checkbox" data-akce="chronicka"' + (n.chronicka_bolest ? ' checked' : '') + '>Mám chronickou bolest – neupozorňuj mě na opakovanou bolest</label>' +
-        '<h3>Odkliknutá doporučení</h3>' + doporuceni + '</section>' +
-      '<section class="karta"><h2>Záloha</h2><p class="tlumene male">Všechno je jen v tomto telefonu. Když smažeš data prohlížeče nebo změníš telefon, bez zálohy o záznamy přijdeš. Záloha obsahuje osobní věci – ulož ji jen na své místo.</p>' +
+        '<h3>Přijatá doporučení</h3>' + doporuceni + '</section>' +
+      '<section class="karta"><h2>Záloha</h2><p class="tlumene male">Všechno je jen v tomto telefonu. Když smažeš data prohlížeče nebo změníš telefon, bez zálohy o záznamy přijdeš. Záloha obsahuje osobní věci, dávej na ni pozor!</p>' +
         '<div class="odkazy"><button type="button" class="tlacitko male-t" data-akce="zaloha">Stáhnout zálohu</button>' +
         '<label class="tlacitko obrys male-t" style="cursor:pointer">Nahrát zálohu<input type="file" accept=".json,application/json" data-akce="nahrat" class="skryte"></label></div></section>' +
       '<section class="karta"><h2>Smazat všechno</h2>' +
@@ -678,7 +827,7 @@ async function obrazovkaNastaveni() {
           : '<button type="button" class="tlacitko obrys male-t" style="align-self:flex-start" data-akce="smazat">Smazat všechna data</button>') +
       '</section>' +
       '<section class="karta"><h2>O aplikaci</h2>' +
-        '<p class="tlumene male">Mám se! · verze ' + h(n.verze_aplikace) + ' (první prototyp). Není zdravotnický prostředek a nenahrazuje odbornou pomoc.</p>' +
+        '<p class="tlumene male">Mám se! · verze ' + h(U.VERZE_APLIKACE) + ' (první prototyp). Není zdravotnický prostředek a nenahrazuje odbornou pomoc.</p>' +
         '<p class="tlumene male">Kolo emocí a kolo potřeb © Emer, Mimonádovna. Průvodce je inspirovaný nenásilnou komunikací (Marshall B. Rosenberg; Feelings and Needs Inventory © 2005 Center for Nonviolent Communication). Skupiny potřeb podle Manfreda Max-Neefa.</p></section>' +
     '</main>' + navigace('nastaveni');
 }
@@ -689,8 +838,38 @@ async function obrazovkaNastaveni() {
 
 const AKCE = {
   novyZaznam() {
-    // Nový záznam začne čistý jen tehdy, když ten předchozí nemá obsah.
-    if (!maObsah(koncept)) koncept = novyKoncept();
+    // Nový záznam začne čistý, když ten předchozí nemá obsah nebo už je uložený.
+    if (!maObsah(koncept) || koncept.ulozeno) koncept = novyKoncept();
+  },
+  async fotkaPridat(d, el) {
+    const soubor = el.files && el.files[0];
+    if (!soubor) return;
+    try {
+      koncept.fotka = await zmensiFotku(soubor);
+    } catch (e) {
+      oznam('Tuhle fotku se nepodařilo načíst.');
+    }
+    prekresli();
+  },
+  fotkaOdebrat() { koncept.fotka = null; prekresli(); },
+  async upravitZaznam(d) {
+    koncept = konceptZeZaznamu(await U.nactiZaznam(d.id));
+    location.hash = '#/zaznam';
+  },
+  smazatZaznam(d) { mazaniZaznamu = d.id; prekresli(); },
+  smazatZaznamNe() { mazaniZaznamu = null; prekresli(); },
+  async smazatZaznamAno(d) {
+    await U.smazZaznam(d.id);
+    mazaniZaznamu = null;
+    oznam('Záznam je smazaný.');
+    location.hash = '#/domov';
+  },
+  // Doplnit do právě uloženého záznamu část, která ještě chybí.
+  doplnit(d) {
+    koncept = posledniKoncept;
+    const naPrvniStrane = d.cast === 'zaklad' || d.cast === 'fotka';
+    koncept.fokus = naPrvniStrane ? null : d.cast;
+    location.hash = naPrvniStrane ? '#/zaznam' : '#/zaznam-dal';
   },
   zpet() { history.length > 1 ? history.back() : (location.hash = '#/domov'); },
 
@@ -806,11 +985,17 @@ const AKCE = {
       return;
     }
     if (diktovani) diktovani.stop();
+    const doplnuji = !!koncept.ulozeno;
+    if (doplnuji) koncept.upraveno = U.tedS(); // doplňování už uloženého záznamu
     const zaznam = sestavZaznam(koncept);
     await U.ulozZaznam(zaznam);
     posledni = zaznam;
+    koncept.ulozeno = true;
+    koncept.fokus = null;
+    posledniKoncept = koncept;
     koncept = null;
-    doporuceniKUkazani = await mamUkazatBolest() ? 'bolest' : null;
+    // Kartičku o bolesti nabízíme jen po prvním uložení, ne při každém doplnění.
+    if (!doplnuji) doporuceniKUkazani = await mamUkazatBolest() ? 'bolest' : null;
     location.hash = '#/hotovo';
   },
 
@@ -899,7 +1084,7 @@ function trasa() { return location.hash.replace(/^#\/?/, '') || 'domov'; }
 let posledniTrasa = null;
 
 async function vykresli() {
-  const t = trasa();
+  const [t, parametr] = trasa().split('/');
   const stejnaObrazovka = t === posledniTrasa;
   const posun = window.scrollY;
   let html;
@@ -909,6 +1094,7 @@ async function vykresli() {
     case 'hotovo':     html = obrazovkaHotovo(); break;
     case 'pomoc':      html = obrazovkaPomoc(); break;
     case 'nastaveni':  html = await obrazovkaNastaveni(); break;
+    case 'detail':     html = await obrazovkaDetail(decodeURIComponent(parametr)); break;
     default:           html = await obrazovkaDomov();
   }
   app.innerHTML = html;

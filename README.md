@@ -2,7 +2,7 @@
 
 Osobní deník pohody. Webová aplikace (PWA), která běží v telefonu a všechno, co do ní člověk zapíše, nechává jen v jeho telefonu.
 
-**Verze 0.1.0 – první prototyp:** Domov, okamžitý záznam (dva kroky), pomoc, nastavení se zálohou.
+**Verze 0.1.5 – první prototyp:** Domov, okamžitý záznam (dva kroky) s fotkou, doplňování a detail záznamu, pomoc, nastavení se zálohou.
 
 ## Co je v kterém souboru
 
@@ -19,7 +19,7 @@ Osobní deník pohody. Webová aplikace (PWA), která běží v telefonu a všec
 
 ## Kam se co ukládá
 
-- Záznamy a nastavení: jen v prohlížeči telefonu (IndexedDB). Nikam se neposílají.
+- Záznamy, fotky a nastavení: jen v prohlížeči telefonu (IndexedDB). Nikam se neposílají. Fotky se zmenší a tím ztratí skryté údaje (např. místo pořízení); v záloze jsou uložené jako text.
 - Diktování přes tlačítko „Diktovat“ zpracovává Google (stejně jako mikrofon na klávesnici).
 - Písmo nadpisů Fraunces se zatím načítá z Google Fonts. Později ho uložíme přímo k aplikaci.
 

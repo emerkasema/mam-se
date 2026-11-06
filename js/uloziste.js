@@ -6,6 +6,7 @@
 
 const NAZEV_DB = 'mamse';
 const VERZE_DB = 1;
+export const VERZE_APLIKACE = '0.1.5';
 
 // Výchozí nastavení – použije se, dokud člověk nic nezmění.
 export const VYCHOZI_NASTAVENI = {
@@ -19,7 +20,7 @@ export const VYCHOZI_NASTAVENI = {
   tvar_osloveni: 'oba',       // 'oba' = „byla/byl“, 'zensky' = „byla“, 'muzsky' = „byl“
   souhrn_zapnut: false,
   kod_ucastnika: null,
-  verze_aplikace: '0.1.0'
+  verze_aplikace: VERZE_APLIKACE
 };
 
 let dbSlib = null; // jednou otevřená databáze se pak používá pořád
@@ -64,6 +65,14 @@ async function operace(uloziste, rezim, co) {
 
 export function ulozZaznam(zaznam) {
   return operace('zaznamy', 'readwrite', s => s.put(zaznam));
+}
+
+export function nactiZaznam(id) {
+  return operace('zaznamy', 'readonly', s => s.get(id));
+}
+
+export function smazZaznam(id) {
+  return operace('zaznamy', 'readwrite', s => s.delete(id));
 }
 
 export function vsechnyZaznamy() {
@@ -118,10 +127,14 @@ export async function vytvorZalohu() {
     aplikace: 'Mám se!',
     format_zalohy: 1,
     exportovano: tedS(),
-    verze_aplikace: VYCHOZI_NASTAVENI.verze_aplikace
+    verze_aplikace: VERZE_APLIKACE
   };
   for (const u of VSECHNA_ULOZISTE) {
     zaloha[u] = await operace(u, 'readonly', s => s.getAll());
+  }
+  // Fotky převedeme na text, aby se vešly do souboru zálohy.
+  for (const z of zaloha.zaznamy) {
+    if (z.fotka instanceof Blob) z.fotka = await blobNaText(z.fotka);
   }
   zaloha.nastaveni = await nactiNastaveni();
   return zaloha;
@@ -136,6 +149,7 @@ export async function nahrajZalohu(zaloha) {
   let pridano = 0;
   const stavajici = new Map((await vsechnyZaznamy()).map(z => [z.id, z]));
   for (const z of zaloha.zaznamy || []) {
+    if (typeof z.fotka === 'string') z.fotka = await (await fetch(z.fotka)).blob(); // text zpět na fotku
     const mam = stavajici.get(z.id);
     const novejsi = !mam || (z.upraveno || z.vytvoreno) > (mam.upraveno || mam.vytvoreno);
     if (novejsi) { await ulozZaznam(z); if (!mam) pridano++; }
@@ -153,6 +167,14 @@ export async function smazVse() {
   for (const u of [...VSECHNA_ULOZISTE, 'nastaveni']) {
     await operace(u, 'readwrite', s => s.clear());
   }
+}
+
+function blobNaText(blob) {
+  return new Promise(hotovo => {
+    const ctecka = new FileReader();
+    ctecka.onload = () => hotovo(ctecka.result);
+    ctecka.readAsDataURL(blob);
+  });
 }
 
 // ---------------- Pomůcky pro čas ----------------

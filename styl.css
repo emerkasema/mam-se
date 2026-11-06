@@ -186,7 +186,9 @@ details.karta[open] summary::after { content: '－'; }
 
 /* ---------- Seznam posledních záznamů ---------- */
 .seznam { display: flex; flex-direction: column; gap: 8px; }
-.zaznam-radek { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-radius: 14px; background: var(--plocha); border: 1px solid var(--linka); }
+.zaznam-radek { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-radius: 14px; background: var(--plocha); border: 1px solid var(--linka); color: var(--inkoust); text-decoration: none; }
+.zaznam-radek > div { flex: 1; }
+.zaznam-radek .sipka { align-self: center; font-size: 22px; color: var(--druhotny); }
 .znamka {
   min-width: 38px; height: 38px; border-radius: 19px; display: inline-flex; align-items: center; justify-content: center;
   font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; background: var(--bezova);
@@ -222,3 +224,8 @@ details.karta[open] summary::after { content: '－'; }
 }
 
 .skryte { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* ---------- Fotka u záznamu ---------- */
+.fotka-nahled { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.fotka-nahled img { max-width: 100%; max-height: 240px; border-radius: 16px; border: 1px solid var(--linka); }
+.fotka-velka { width: 100%; border-radius: 16px; }
