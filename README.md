@@ -1,0 +1,34 @@
+# Mám se!
+
+Osobní deník pohody. Webová aplikace (PWA), která běží v telefonu a všechno, co do ní člověk zapíše, nechává jen v jeho telefonu.
+
+**Verze 0.1.0 – první prototyp:** Domov, okamžitý záznam (dva kroky), pomoc, nastavení se zálohou.
+
+## Co je v kterém souboru
+
+| Soubor | K čemu je |
+| --- | --- |
+| `index.html` | Kostra stránky. Načte vzhled a program. |
+| `styl.css` | Vzhled: barvy (nahoře v `:root`), písmo, tlačítka, karty. |
+| `js/app.js` | Program: obrazovky, klepnutí, ukládání záznamu, pomoc. |
+| `js/slovniky.js` | Slova, která aplikace nabízí: emoce, tělo, potřeby, činnosti. Tady se slova přidávají a opravují. |
+| `js/uloziste.js` | Ukládání do telefonu (IndexedDB), záloha a obnova. |
+| `sw.js` | Díky němu aplikace funguje i bez internetu. **Po každé změně souborů zvyš číslo `VERZE`.** |
+| `manifest.webmanifest` | Název a ikony pro přidání na plochu. |
+| `ikony/`, `fonty/` | Logo, ikony aplikace a písmo Inter. |
+
+## Kam se co ukládá
+
+- Záznamy a nastavení: jen v prohlížeči telefonu (IndexedDB). Nikam se neposílají.
+- Diktování přes tlačítko „Diktovat“ zpracovává Google (stejně jako mikrofon na klávesnici).
+- Písmo nadpisů Fraunces se zatím načítá z Google Fonts. Později ho uložíme přímo k aplikaci.
+
+## Jak vyzkoušet změny
+
+Po úpravě souborů je nahraj na GitHub znovu (stejně jako poprvé). Zvyš číslo `VERZE` v `sw.js`, jinak si telefon může chvíli držet starou verzi. Telefon pak stačí zavřít a otevřít aplikaci znovu.
+
+## Licence a zdroje
+
+Kolo emocí a kolo potřeb © Emer, Mimonádovna. Průvodce je inspirovaný nenásilnou komunikací (Marshall B. Rosenberg; Feelings and Needs Inventory © 2005 Center for Nonviolent Communication). Skupiny potřeb podle Manfreda Max-Neefa. Písmo Inter (SIL Open Font License).
+
+Mám se! není zdravotnický prostředek a nenahrazuje odbornou pomoc.

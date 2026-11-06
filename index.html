@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Mám se!</title>
+  <meta name="description" content="Osobní deník pohody. Všechno zůstává v Tvém telefonu.">
+  <!-- Barva horní lišty telefonu -->
+  <meta name="theme-color" content="#F7F2EA">
+  <!-- Aplikace se dá přidat na plochu -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="ikony/logo.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="ikony/apple-touch-icon.png">
+  <!-- Písmo nadpisů Fraunces se zatím načítá z Google Fonts.
+       Až ho budeme mít uložené u aplikace, tyhle tři řádky smažeme. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styl.css">
+</head>
+<body>
+  <!-- Sem aplikace vykresluje obrazovky (viz js/app.js) -->
+  <div id="app" aria-live="polite"></div>
+  <noscript><p style="padding:20px">Mám se! potřebuje zapnutý JavaScript.</p></noscript>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

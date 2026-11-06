@@ -1,0 +1,224 @@
+/* =====================================================================
+   VZHLED APLIKACE „Mám se!“
+   Barvy odpovídají čtyřem lístečkům loga. Když budeš chtít barvu
+   změnit, stačí ji upravit tady nahoře – použije se všude.
+   ===================================================================== */
+
+/* Písmo Inter máme uložené přímo u aplikace (nic se nestahuje odjinud). */
+@font-face { font-family: 'Inter'; src: url('fonty/Inter-Regular.woff') format('woff'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Inter'; src: url('fonty/Inter-Medium.woff') format('woff'); font-weight: 500; font-display: swap; }
+@font-face { font-family: 'Inter'; src: url('fonty/Inter-SemiBold.woff') format('woff'); font-weight: 600; font-display: swap; }
+
+:root {
+  --lahvova: #246B56;        /* velký zelený lístek – hlavní barva */
+  --lahvova-tmava: #1A5242;  /* stisknutá tlačítka */
+  --svezi: #72B97F;          /* malý zelený lístek */
+  --medova: #E6B173;         /* velký oranžový lístek – skleničky */
+  --zlutooranzova: #F5BE4B;  /* malý oranžový lístek */
+  --kremova: #F7F2EA;        /* pozadí */
+  --plocha: #FFFDF9;         /* karty */
+  --inkoust: #1F2A26;        /* text */
+  --druhotny: #5E6B65;       /* tlumený text */
+  --linka: #E6DED2;          /* jemné čáry */
+  --okraj: #CFC5B6;          /* okraje tlačítek */
+  --jemna-zelena: #E3EDE6;   /* jemné zelené pozadí */
+  --bezova: #EFE8DD;         /* jemné béžové pozadí */
+  --nadpisy: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --text: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--kremova);
+  color: var(--inkoust);
+  font-family: var(--text);
+  font-size: 16px;
+  line-height: 1.45;
+}
+/* Obsah nikdy nebude širší než telefon, ani na počítači. */
+#app { max-width: 520px; margin: 0 auto; min-height: 100dvh; display: flex; flex-direction: column; }
+
+h1, h2, h3 { font-family: var(--nadpisy); font-weight: 500; margin: 0; line-height: 1.2; }
+h1 { font-size: 30px; }
+h2 { font-size: 20px; }
+h3 { font-size: 17px; }
+p { margin: 0; }
+a { color: var(--lahvova); }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--zlutooranzova); outline-offset: 2px; }
+
+/* ---------- Hlavička a spodní navigace ---------- */
+.hlavicka { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 18px 16px 8px 18px; }
+.znacka { display: flex; align-items: center; gap: 10px; font-family: var(--nadpisy); font-weight: 600; font-size: 24px; }
+.znacka img { width: 34px; height: 34px; }
+.nazev-obrazovky { flex: 1; font-family: var(--nadpisy); font-size: 20px; font-weight: 500; }
+.ikona-tlacitko {
+  width: 44px; height: 44px; border-radius: 22px; border: 1px solid #DCD3C6; background: var(--plocha);
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer; text-decoration: none; color: var(--inkoust);
+}
+.ikona-tlacitko.bez-okraje { border: none; background: transparent; }
+
+.obsah { flex: 1; display: flex; flex-direction: column; gap: 18px; padding: 8px 20px 28px 20px; }
+
+.navigace {
+  position: sticky; bottom: 0; display: grid; grid-template-columns: repeat(3, 1fr);
+  padding: 6px 12px calc(10px + env(safe-area-inset-bottom)) 12px; background: var(--plocha); border-top: 1px solid var(--linka);
+}
+.navigace a, .navigace span {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 52px;
+  text-decoration: none; color: var(--druhotny); font-size: 12px;
+}
+.navigace a[aria-current="page"] { color: var(--lahvova); font-weight: 600; }
+.navigace .brzy { opacity: .55; }
+
+/* ---------- Karty ---------- */
+.karta { display: flex; flex-direction: column; gap: 12px; padding: 18px; border-radius: 20px; background: var(--plocha); border: 1px solid var(--linka); }
+.karta-radek { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.tlumene { color: var(--druhotny); font-size: 14px; }
+.male { font-size: 12px; }
+
+.karta-hlavni {
+  display: flex; flex-direction: column; gap: 14px; padding: 20px; border-radius: 20px;
+  background: var(--lahvova); color: var(--kremova); text-decoration: none;
+}
+.karta-hlavni .titulek { font-family: var(--nadpisy); font-size: 22px; font-weight: 500; }
+.karta-hlavni .popis { font-size: 14px; color: #DCE7E1; }
+
+/* ---------- Tlačítka ---------- */
+.tlacitko {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 20px;
+  border-radius: 24px; border: 1.5px solid var(--lahvova); background: var(--lahvova); color: var(--kremova);
+  font-weight: 600; font-size: 15px; text-decoration: none; cursor: pointer;
+}
+.tlacitko:active { background: var(--lahvova-tmava); }
+.tlacitko.obrys { background: var(--plocha); color: var(--lahvova); }
+.tlacitko.jemne { background: var(--jemna-zelena); color: var(--lahvova-tmava); border-color: var(--jemna-zelena); }
+.tlacitko.svetle { background: var(--kremova); color: var(--lahvova); border-color: var(--kremova); align-self: flex-start; min-height: 44px; }
+.tlacitko.male-t { min-height: 40px; padding: 0 14px; font-size: 13px; }
+.tlacitko[disabled] { opacity: .5; cursor: default; }
+
+.tlacitko-pomoc {
+  display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 0 18px; border-radius: 16px;
+  border: 1.5px solid var(--lahvova); background: var(--plocha); color: var(--lahvova); text-decoration: none; font-weight: 600; font-size: 15px;
+}
+
+/* Ikonky pera a mikrofonu na tlačítku Zaznamenat */
+.ikony { display: inline-flex; align-items: center; gap: 4px; }
+.ikony .mikrofon { opacity: .75; }
+
+/* ---------- Čipy (návrhy slov) ---------- */
+.cipy { display: flex; flex-wrap: wrap; gap: 8px; }
+.cip {
+  min-height: 44px; padding: 0 16px; border-radius: 22px; border: 1.5px solid var(--okraj);
+  background: var(--plocha); color: var(--inkoust); font-size: 15px; cursor: pointer;
+}
+.cip[aria-pressed="true"] { background: var(--lahvova); border-color: var(--lahvova); color: var(--kremova); font-weight: 600; }
+.cip.pridat { border-style: dashed; color: var(--druhotny); }
+.cip.navrh { border-color: var(--zlutooranzova); background: #FDF3DC; }
+
+.panel { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 16px; background: var(--bezova); }
+.panel-nadpis { font-size: 13px; color: #4F5B55; }
+
+/* ---------- Škála −3 až +3 ---------- */
+.skala { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.skala button {
+  height: 46px; border-radius: 23px; border: 1.5px solid var(--okraj); background: var(--plocha);
+  font-size: 15px; font-weight: 600; cursor: pointer; font-variant-numeric: tabular-nums;
+}
+.skala button[aria-pressed="true"] { background: var(--lahvova); border-color: var(--lahvova); color: var(--kremova); }
+.skala-popisky { display: flex; justify-content: space-between; font-size: 12px; color: var(--druhotny); }
+
+/* ---------- Pole pro psaní ---------- */
+.pole {
+  display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 20px;
+  background: var(--plocha); border: 1.5px solid var(--okraj);
+}
+.pole:focus-within { border-color: var(--lahvova); }
+.pole textarea, .pole input {
+  border: none; outline: none; resize: vertical; background: transparent; width: 100%;
+  font-family: var(--text); font-size: 16px; line-height: 1.5; color: var(--inkoust);
+}
+.pole textarea::placeholder, .pole input::placeholder { color: #6B756F; }
+.pole-radek { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.vstup {
+  width: 100%; min-height: 46px; padding: 0 14px; border-radius: 14px; border: 1.5px solid var(--okraj);
+  background: var(--plocha); font-family: var(--text); font-size: 16px; color: var(--inkoust);
+}
+
+/* ---------- Síla 0–6 (tečky) ---------- */
+.vybrane { display: flex; flex-direction: column; gap: 8px; }
+.vybrana-polozka {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px; border-radius: 14px; background: var(--plocha); border: 1px solid var(--linka);
+}
+.vybrana-polozka .jmeno { font-weight: 600; font-size: 15px; }
+.tecky { display: flex; gap: 3px; }
+.tecky button {
+  width: 30px; height: 30px; padding: 0; border: none; background: transparent; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.tecky button span { width: 20px; height: 20px; border-radius: 10px; border: 1.5px solid var(--lahvova); background: var(--plocha); }
+.tecky button.plna span { background: var(--lahvova); }
+
+/* ---------- Skleničky potřeb ---------- */
+.sklenicka-radek { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 14px; background: var(--plocha); border: 1px solid var(--linka); }
+.sklenicka-radek .jmeno { flex: 1; font-weight: 600; font-size: 15px; }
+.sklenicka-ovladani { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.hladiny { display: flex; gap: 4px; }
+.hladiny button { min-width: 34px; height: 34px; border-radius: 17px; border: 1.5px solid var(--okraj); background: var(--plocha); font-size: 13px; cursor: pointer; }
+.hladiny button[aria-pressed="true"] { background: var(--medova); border-color: var(--medova); color: var(--inkoust); font-weight: 600; }
+.prepinac-maly { font-size: 13px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.prepinac-maly input { width: 18px; height: 18px; accent-color: var(--lahvova); }
+
+/* ---------- Rozbalovací části ---------- */
+details.karta summary { cursor: pointer; font-family: var(--nadpisy); font-size: 18px; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+details.karta summary::-webkit-details-marker { display: none; }
+details.karta summary::after { content: '＋'; font-family: var(--text); color: var(--lahvova); }
+details.karta[open] summary::after { content: '－'; }
+
+/* ---------- Spodní lišta s tlačítky ---------- */
+.spodni-lista {
+  position: sticky; bottom: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  padding: 12px 20px calc(16px + env(safe-area-inset-bottom)) 20px; background: var(--kremova); border-top: 1px solid var(--linka);
+}
+
+/* ---------- Seznam posledních záznamů ---------- */
+.seznam { display: flex; flex-direction: column; gap: 8px; }
+.zaznam-radek { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-radius: 14px; background: var(--plocha); border: 1px solid var(--linka); }
+.znamka {
+  min-width: 38px; height: 38px; border-radius: 19px; display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; background: var(--bezova);
+}
+.znamka.prijemna { background: #D5EBD9; }
+.znamka.neprijemna { background: #F6E3C8; }
+
+/* ---------- Týden ---------- */
+.tyden { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.den { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: var(--druhotny); }
+.den .kolecko { width: 36px; height: 36px; border-radius: 18px; background: #EFEAE2; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: var(--inkoust); }
+.den.dnes { color: var(--inkoust); font-weight: 600; }
+.den.dnes .kolecko { border: 1.5px dashed #B9AE9E; background: transparent; }
+
+/* ---------- Pomoc ---------- */
+.krok { display: flex; gap: 12px; }
+.krok .cislo { flex: none; width: 30px; height: 30px; border-radius: 15px; background: var(--jemna-zelena); color: var(--lahvova-tmava); font-weight: 600; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; }
+.krok .telo-kroku { display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.kontakt { display: flex; flex-direction: column; gap: 4px; padding: 12px; border-radius: 14px; background: var(--kremova); }
+.kontakt .nazev { font-weight: 600; }
+.stitek { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+.stitek.otevreno { background: #D5EBD9; color: var(--lahvova-tmava); }
+.stitek.zavreno { background: var(--bezova); color: var(--druhotny); }
+.odkazy { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Klidná kartička s doporučením (nikdy poplach) */
+.doporuceni { background: #FDF3DC; border-color: #F2DDA9; }
+
+/* Oznámení dole na obrazovce */
+.oznameni {
+  position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); max-width: 90vw;
+  background: var(--inkoust); color: var(--kremova); padding: 12px 18px; border-radius: 14px; font-size: 14px; z-index: 10;
+}
+
+.skryte { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
