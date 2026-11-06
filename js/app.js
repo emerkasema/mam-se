@@ -23,6 +23,7 @@ let doporuceniKUkazani = null; // klidná kartička po uložení, pokud se hodí
 let mazaniPotvrzeni = false;   // dvoukrokové mazání všech dat
 let mazaniZaznamu = null;      // id záznamu, u kterého se ptáme „opravdu smazat?“
 let diktovani = null;          // běžící diktování (pokud ho telefon umí)
+let diktovaniCil = null;       // do kterého pole se diktuje
 
 // ---------------------------------------------------------------------
 // Pomůcky
@@ -75,6 +76,7 @@ const IKONA = {
   tuzka: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1-4L16 5l3 3L8 19l-4 1zM14 7l3 3"/></svg>',
   mikrofon: '<svg class="mikrofon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
   fotak: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+  galerie: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="M5 18l5-5 3 3 2-2 4 4"/></svg>',
   domov: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/></svg>',
   prehled: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',
   nastaveni: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>'
@@ -342,7 +344,8 @@ function obrazovkaZaznam() {
   // Vybrané emoce se sílou
   let vybrane = '';
   for (const [slovo, v] of Object.entries(k.emoce)) {
-    vybrane += '<div class="vybrana-polozka"><span class="jmeno">' + h(slovo) + '</span>' + tecky('emoce', slovo, v.intenzita) + '</div>';
+    vybrane += editorSlova('emoce', slovo) ||
+      ('<div class="vybrana-polozka"><span class="jmeno" data-dlouze="emoce" data-slovo="' + h(slovo) + '">' + h(slovo) + '</span>' + tecky('emoce', slovo, v.intenzita) + '</div>');
   }
 
   // Hněv a vztek: volitelné doplňující otázky
@@ -364,9 +367,7 @@ function obrazovkaZaznam() {
   }
 
   const umiDiktovat = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-  const diktTlacitko = umiDiktovat
-    ? '<button type="button" class="tlacitko obrys male-t" data-akce="diktovat" id="dikt">' + IKONA.mikrofon + (diktovani ? 'Poslouchám… klepni pro konec' : 'Diktovat') + '</button>'
-    : '';
+  const diktTlacitko = tlacitkoDiktovani('text');
 
   return '<header class="hlavicka">' +
       '<a class="ikona-tlacitko bez-okraje" href="#/domov" aria-label="Zpět na Domov">' + IKONA.zpet + '</a>' +
@@ -391,7 +392,7 @@ function obrazovkaZaznam() {
         '<div id="poznana"></div>' +
         '<p class="tlumene">Nebo vyber z návrhů:</p>' +
         '<div class="cipy">' + zakladni + '</div>' + vlastni + presnejsi +
-        (vybrane ? '<div class="vybrane" aria-label="Vybrané emoce a jejich síla">' + vybrane + '</div>' : '') +
+        (vybrane ? '<div class="vybrane" aria-label="Vybrané emoce a jejich síla">' + vybrane + '</div><p class="tlumene male">Dlouhým podržením slova ho změníš nebo odstraníš.</p>' : '') +
         hnev +
       '</section>' +
     '</main>' +
@@ -437,7 +438,7 @@ function obrazovkaZaznamDal() {
       bolest += '<span class="panel-nadpis">Kde? (můžeš vybrat víc míst)</span><div class="cipy">' +
         S.MISTA_NA_TELE.map(m => cip(m, k.bolestKde.includes(m), 'bolestKde', { misto: m })).join('') + '</div>' +
         '<label class="panel-nadpis" for="bolest-slova">Co a jak bolí – vlastními slovy</label>' +
-        '<div class="pole"><textarea id="bolest-slova" rows="2" data-pole="bolestSlova">' + h(k.bolestSlova) + '</textarea></div>';
+        poleSDiktovanim('bolestSlova', 'Co a jak bolí');
     }
     bolest += '</div>';
   }
@@ -465,8 +466,10 @@ function obrazovkaZaznamDal() {
       hladiny += '<button type="button" data-akce="naplneni" data-slovo="' + h(potreba) + '" data-hodnota="' + i +
         '" aria-pressed="' + (v.naplneni === i) + '" aria-label="' + h(potreba) + ': naplnění ' + i + ' ze 4">' + i + '</button>';
     }
+    const editor = editorSlova('potreby', potreba);
+    if (editor) { sklenicky += editor; continue; }
     sklenicky += '<div class="sklenicka-radek">' + sklenicka(v.naplneni, v.skripnuta) +
-      '<span class="jmeno">' + h(potreba) + '</span>' +
+      '<span class="jmeno" data-dlouze="potreby" data-slovo="' + h(potreba) + '">' + h(potreba) + '</span>' +
       '<div class="sklenicka-ovladani"><div class="hladiny" role="group" aria-label="Kolik je ve skleničce">' + hladiny + '</div>' +
       '<label class="prepinac-maly"><input type="checkbox" data-akce="skripnuta" data-slovo="' + h(potreba) + '"' +
       (v.skripnuta ? ' checked' : '') + '>skřípnutá</label></div></div>';
@@ -493,18 +496,18 @@ function obrazovkaZaznamDal() {
       vyberCasti(k, [
         ['telo', Object.keys(k.telo).length, 'Co cítíš v těle?',
           telo + (teloVybrane ? '<div class="vybrane">' + teloVybrane + '</div>' : '') + bolest],
-        ['potreby', Object.keys(k.potreby).length || k.otevrenaSkupina, 'Co je teď živé? (potřeby)',
+        ['potreby', Object.keys(k.potreby).length || k.otevrenaSkupina || k.vlastniPotreba, 'Co je teď živé? (potřeby)',
           '<p class="tlumene male">Návrhy podle Max-Neefa. Sklenička ukazuje, kolik té potřeby teď máš: 0 prázdná, 4 plná. Skřípnutá potřeba dostane prasklinu – i plná sklenička může prasknout.</p>' +
           '<div class="cipy">' + skupiny + '</div>' + vlastniPotreba + potrebyPanel +
-          (sklenicky ? '<div class="vybrane">' + sklenicky + '</div>' : '')],
+          (sklenicky ? '<div class="vybrane">' + sklenicky + '</div><p class="tlumene male">Dlouhým podržením názvu potřebu změníš nebo odstraníš.</p>' : '')],
         ['kolem', k.cinnost.length || k.sKym.length || k.kde, 'Co se děje kolem?',
           '<span class="panel-nadpis">Co právě děláš?</span><div class="cipy">' + cinnosti + '</div>' +
           '<span class="panel-nadpis">S kým?</span><div class="cipy">' + skym + '</div>' +
           '<span class="panel-nadpis">Kde?</span><div class="cipy">' + kde + '</div>'],
         ['pomuze', k.strategie || k.prosba, 'Co by Ti teď mohlo udělat dobře?',
-          '<div class="pole"><textarea rows="2" data-pole="strategie" aria-label="Co by Ti teď mohlo udělat dobře?" placeholder="Třeba procházka, napsat kamarádce, chvíli ticha…">' + h(k.strategie) + '</textarea></div>' +
+          poleSDiktovanim('strategie', 'Co by Ti teď mohlo udělat dobře?', 'Třeba procházka, napsat kamarádce, chvíli ticha…') +
           '<label class="panel-nadpis" for="prosba">Chceš o něco konkrétního požádat – sebe nebo někoho jiného?</label>' +
-          '<div class="pole"><textarea id="prosba" rows="2" data-pole="prosba">' + h(k.prosba) + '</textarea></div>'],
+          poleSDiktovanim('prosba', 'Prosba')],
         ['vyzkum', Object.keys(k.vyzkum).length, 'Pro výzkum (nepovinné)',
           '<p class="tlumene male">Devět stejných otázek pokaždé – z nich se počítá klasický U-index. Jak moc teď cítíš… (0 vůbec, 6 velmi silně). Druhé klepnutí odpověď zruší.</p>' +
           '<div class="vybrane">' + vyzkum + '</div>']
@@ -514,6 +517,51 @@ function obrazovkaZaznamDal() {
       (k.fokus ? '<a class="tlacitko obrys" href="#/hotovo">Zpět</a>' : '<a class="tlacitko obrys" href="#/zaznam">Zpět</a>') +
       '<button type="button" class="tlacitko" data-akce="ulozit">Uložit</button>' +
     '</footer>';
+}
+
+// ---------------- DIKTOVÁNÍ ----------------
+// Diktovat jde do každého většího pole. „cil“ je název pole v konceptu
+// (text, strategie, prosba, bolestSlova) a zároveň určuje, do kterého
+// políčka na obrazovce se slova vepíšou.
+const ID_POLE = { text: 'text', strategie: 'pole-strategie', prosba: 'prosba', bolestSlova: 'bolest-slova' };
+
+function tlacitkoDiktovani(cil) {
+  if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) return '';
+  const bezi = diktovani && diktovaniCil === cil;
+  return '<button type="button" class="tlacitko obrys male-t" data-akce="diktovat" data-cil="' + cil + '">' +
+    IKONA.mikrofon + (bezi ? 'Poslouchám… klepni pro konec' : 'Diktovat') + '</button>';
+}
+
+// Pole pro psaní s tlačítkem Diktovat pod ním.
+function poleSDiktovanim(cil, popisek, placeholder, radku = 2) {
+  return '<div class="pole"><textarea id="' + ID_POLE[cil] + '" rows="' + radku + '" data-pole="' + cil + '" aria-label="' + h(popisek) + '"' +
+    (placeholder ? ' placeholder="' + h(placeholder) + '"' : '') + '>' + h(koncept[cil]) + '</textarea>' +
+    (tlacitkoDiktovani(cil) ? '<div class="pole-radek"><span></span>' + tlacitkoDiktovani(cil) + '</div>' : '') + '</div>';
+}
+
+// ---------------- ÚPRAVA SLOVA (dlouhé podržení) ----------------
+// Když se do vybraných slov dostane překlep, dlouhým podržením se
+// slovo otevře k přepsání nebo odstranění.
+
+function editorSlova(co, slovo) {
+  const u = koncept && koncept.upravuji;
+  if (!u || u.co !== co || u.slovo !== slovo) return '';
+  return '<div class="panel" role="group" aria-label="Upravit slovo">' +
+    '<label class="panel-nadpis" for="uprava-slova">Změnit nebo odstranit</label>' +
+    '<input class="vstup" id="uprava-slova" value="' + h(slovo) + '" autocomplete="off">' +
+    '<div class="odkazy"><button type="button" class="tlacitko male-t" data-akce="slovoUlozit">Uložit</button>' +
+    '<button type="button" class="tlacitko obrys male-t" data-akce="slovoOdstranit">Odstranit</button>' +
+    '<button type="button" class="tlacitko obrys male-t" data-akce="slovoZrusit">Zrušit</button></div></div>';
+}
+
+// Přejmenuje klíč v objektu a zachová pořadí i hodnotu.
+function prejmenujKlic(obj, stary, novy) {
+  const vysledek = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (k === stary) { if (!(novy in obj) || novy === stary) vysledek[novy] = v; }
+    else vysledek[k] = v;
+  }
+  return vysledek;
 }
 
 // ---------------- FOTKA ----------------
@@ -544,8 +592,13 @@ function blokFotky(k) {
     return '<div class="fotka-nahled"><img src="' + urlFotky(k.fotka) + '" alt="Připojená fotka">' +
       '<button type="button" class="tlacitko obrys male-t" data-akce="fotkaOdebrat">Odebrat fotku</button></div>';
   }
-  return '<label class="tlacitko obrys male-t" style="align-self:flex-start;cursor:pointer">' + IKONA.fotak + 'Přidat fotku' +
-    '<input type="file" accept="image/*" data-akce="fotkaPridat" class="skryte"></label>';
+  // „Pořídit fotku“ otevře rovnou foťák, „Vybrat z galerie“ uložené fotky.
+  return '<div class="odkazy">' +
+    '<label class="tlacitko obrys male-t" style="cursor:pointer">' + IKONA.fotak + 'Pořídit fotku' +
+      '<input type="file" accept="image/*" capture="environment" data-akce="fotkaPridat" class="skryte"></label>' +
+    '<label class="tlacitko obrys male-t" style="cursor:pointer">' + IKONA.galerie + 'Vybrat z galerie' +
+      '<input type="file" accept="image/*" data-akce="fotkaPridat" class="skryte"></label>' +
+    '</div>';
 }
 
 // ---------------- DETAIL ZÁZNAMU ----------------
@@ -631,7 +684,7 @@ function vyberCasti(k, casti) {
   return casti
     .filter(([klic]) => !k.fokus || k.fokus === klic)
     .map(([klic, vyplneno, nadpis, obsah]) =>
-      '<details class="karta"' + (vyplneno || k.fokus === klic ? ' open' : '') + '><summary>' + nadpis + '</summary>' + obsah + '</details>')
+      '<details class="karta" data-cast="' + klic + '"' + (vyplneno || k.fokus === klic ? ' open' : '') + '><summary>' + nadpis + '</summary>' + obsah + '</details>')
     .join('');
 }
 
@@ -841,6 +894,26 @@ const AKCE = {
     // Nový záznam začne čistý, když ten předchozí nemá obsah nebo už je uložený.
     if (!maObsah(koncept) || koncept.ulozeno) koncept = novyKoncept();
   },
+  slovoUlozit() {
+    const { co, slovo } = koncept.upravuji;
+    const nove = document.getElementById('uprava-slova').value.trim().toLowerCase();
+    if (!nove) return AKCE.slovoOdstranit();
+    koncept[co] = prejmenujKlic(koncept[co], slovo, nove);
+    if (co === 'emoce') koncept.podTim = koncept.podTim.map(x => x === slovo ? nove : x);
+    koncept.upravuji = null;
+    prekresli();
+  },
+  slovoOdstranit() {
+    const { co, slovo } = koncept.upravuji;
+    delete koncept[co][slovo];
+    if (co === 'emoce') {
+      koncept.podTim = koncept.podTim.filter(x => x !== slovo);
+      if (koncept.otevrenaZakladni === slovo) koncept.otevrenaZakladni = null;
+    }
+    koncept.upravuji = null;
+    prekresli();
+  },
+  slovoZrusit() { koncept.upravuji = null; prekresli(); },
   async fotkaPridat(d, el) {
     const soubor = el.files && el.files[0];
     if (!soubor) return;
@@ -919,10 +992,16 @@ const AKCE = {
     prekresli();
   },
 
-  diktovat() {
+  diktovat(d) {
     const Rozpoznavani = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Rozpoznavani) return;
-    if (diktovani) { diktovani.stop(); return; }
+    const cil = d.cil || 'text';
+    if (diktovani) {
+      const predchozi = diktovaniCil;
+      diktovani.stop();
+      if (predchozi === cil) return; // klepnutí na běžící diktování = konec
+    }
+    diktovaniCil = cil;
     diktovani = new Rozpoznavani();
     diktovani.lang = 'cs-CZ';
     diktovani.continuous = true;
@@ -931,15 +1010,16 @@ const AKCE = {
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
         if (ev.results[i].isFinal) {
           const kus = ev.results[i][0].transcript.trim();
-          koncept.text = (koncept.text ? koncept.text.replace(/\s*$/, ' ') : '') + kus;
-          koncept.zdroj.diktovano = true;
+          koncept[cil] = (koncept[cil] ? koncept[cil].replace(/\s*$/, ' ') : '') + kus;
+          if (cil === 'text') koncept.zdroj.diktovano = true;
         }
       }
-      const pole = document.getElementById('text');
-      if (pole) pole.value = koncept.text;
-      vykresliPoznana();
+      const pole = document.getElementById(ID_POLE[cil]);
+      if (pole) pole.value = koncept[cil];
+      if (cil === 'text') vykresliPoznana();
     };
-    diktovani.onend = () => { diktovani = null; prekresli(); };
+    const tentoBeh = diktovani;
+    diktovani.onend = () => { if (diktovani === tentoBeh) { diktovani = null; diktovaniCil = null; prekresli(); } };
     diktovani.onerror = () => { oznam('Diktování teď nejde. Zkus mikrofon na klávesnici.'); };
     diktovani.start();
     prekresli();
@@ -1097,7 +1177,14 @@ async function vykresli() {
     case 'detail':     html = await obrazovkaDetail(decodeURIComponent(parametr)); break;
     default:           html = await obrazovkaDomov();
   }
+  // Rozbalené části zůstanou rozbalené i po překreslení.
+  const otevrene = stejnaObrazovka
+    ? [...app.querySelectorAll('details[data-cast]')].filter(d => d.open).map(d => d.dataset.cast) : [];
   app.innerHTML = html;
+  for (const cast of otevrene) {
+    const d = app.querySelector('details[data-cast="' + cast + '"]');
+    if (d) d.open = true;
+  }
   if (t === 'zaznam') vykresliPoznana();
   // Při změně obrazovky nahoru, při překreslení stejné obrazovky zůstat na místě.
   window.scrollTo(0, stejnaObrazovka ? posun : 0);
@@ -1114,6 +1201,36 @@ app.addEventListener('click', (ev) => {
   if (!akce) return;
   if (el.tagName === 'BUTTON') ev.preventDefault();
   akce(el.dataset, el);
+});
+
+// Dlouhé podržení (asi půl vteřiny) na vybraném slově otevře úpravu.
+let casovacPodrzeni = null;
+let poPodrzeni = false;
+function otevriUpravu(el) {
+  koncept.upravuji = { co: el.dataset.dlouze, slovo: el.dataset.slovo };
+  if (navigator.vibrate) navigator.vibrate(15); // jemné cvrnknutí na znamení
+  prekresli();
+  setTimeout(() => { const pole = document.getElementById('uprava-slova'); if (pole) { pole.focus(); pole.select(); } }, 50);
+}
+app.addEventListener('pointerdown', (ev) => {
+  const el = ev.target.closest('[data-dlouze]');
+  if (!el || !koncept) return;
+  poPodrzeni = false;
+  casovacPodrzeni = setTimeout(() => { poPodrzeni = true; otevriUpravu(el); }, 550);
+});
+for (const udalost of ['pointerup', 'pointerleave', 'pointercancel', 'pointermove']) {
+  app.addEventListener(udalost, (ev) => {
+    if (udalost === 'pointermove' && Math.abs(ev.movementX) + Math.abs(ev.movementY) < 6) return;
+    clearTimeout(casovacPodrzeni);
+  });
+}
+// Na Androidu dlouhé podržení vyvolá i „kontextovou nabídku“ – tu nahradíme úpravou.
+app.addEventListener('contextmenu', (ev) => {
+  const el = ev.target.closest('[data-dlouze]');
+  if (!el || !koncept) return;
+  ev.preventDefault();
+  clearTimeout(casovacPodrzeni);
+  if (!poPodrzeni) otevriUpravu(el);
 });
 
 // Zaškrtávátka, přepínače a výběr souboru.
@@ -1143,6 +1260,7 @@ app.addEventListener('keydown', (ev) => {
   if (ev.key !== 'Enter') return;
   if (ev.target.id === 'vlastni-emoce') { ev.preventDefault(); AKCE.vlastniEmocePridat(); }
   if (ev.target.id === 'vlastni-potreba') { ev.preventDefault(); AKCE.vlastniPotrebaPridat(); }
+  if (ev.target.id === 'uprava-slova') { ev.preventDefault(); AKCE.slovoUlozit(); }
 });
 
 window.addEventListener('hashchange', vykresli);
