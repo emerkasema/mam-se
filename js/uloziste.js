@@ -6,7 +6,7 @@
 
 const NAZEV_DB = 'mamse';
 const VERZE_DB = 1;
-export const VERZE_APLIKACE = '0.5.0';
+export const VERZE_APLIKACE = '0.6.0';
 
 // Výchozí nastavení – použije se, dokud člověk nic nezmění.
 export const VYCHOZI_NASTAVENI = {
@@ -95,6 +95,16 @@ export function ulozDen(den) {
 }
 
 // ---------------- Nastavení ----------------
+
+export function nactiTyden(tyden) {
+  return operace('tydny', 'readonly', s => s.get(tyden));
+}
+export function ulozTyden(t) {
+  return operace('tydny', 'readwrite', s => s.put(t));
+}
+export function vsechnyTydny() {
+  return operace('tydny', 'readonly', s => s.getAll());
+}
 
 export async function nactiNastaveni() {
   const ulozene = await operace('nastaveni', 'readonly', s => s.get('hlavni'));

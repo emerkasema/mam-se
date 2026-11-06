@@ -218,6 +218,22 @@ a.den .kolecko { border: 1.5px solid transparent; }
 .stitek.otevreno { background: #D5EBD9; color: var(--lahvova-tmava); }
 .stitek.zavreno { background: var(--bezova); color: var(--druhotny); }
 .odkazy { display: flex; flex-wrap: wrap; gap: 8px; }
+.cip.neaktivni { opacity: .4; }
+.dvojice { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dvojice .tlacitko { width: 100%; padding-left: 10px; padding-right: 10px; text-align: center; justify-content: center; }
+.vzorky.male { grid-template-columns: repeat(10, 1fr); gap: 6px; margin-bottom: 8px; }
+.vzorky.male .vzorek { cursor: default; }
+.who5-polozka { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; border-top: 1px solid var(--linka); }
+.who5-otazka { margin: 0; font-weight: 600; }
+.who5-odpovedi { display: flex; flex-direction: column; gap: 6px; }
+.who5-odpovedi .cip { justify-content: flex-start; text-align: left; }
+.who5-odpovedi .cip b { display: inline-block; width: 1.2em; }
+.who5-vysledek { font-size: 18px; margin: 8px 0 0; }
+.odkazy.svisle { flex-direction: column; align-items: stretch; }
+details.tipy summary { cursor: pointer; color: var(--lahvova); font-weight: 600; font-size: 14px; }
+details.tipy ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.karta .prepinac-maly { align-items: flex-start; font-size: 15px; padding: 4px 0; }
+.karta .prepinac-maly input { margin-top: 2px; flex: none; }
 
 /* Klidná kartička s doporučením (nikdy poplach) */
 .doporuceni { background: #FDF3DC; border-color: #F2DDA9; }

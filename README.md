@@ -2,7 +2,7 @@
 
 Osobní deník pohody. Webová aplikace (PWA), která běží v telefonu a všechno, co do ní člověk zapíše, nechává jen v jeho telefonu.
 
-**Verze 0.5.0 – první prototyp:** Domov, okamžitý záznam s fotkou, večerní ohlédnutí s rozvrhem dne, shrnutí a snímek dne ke sdílení, oslava dne s animacemi, barva dne, detail a doplňování záznamů, pomoc, připomínka do kalendáře, nastavení se zálohou.
+**Verze 0.6.0 – první prototyp:** Domov, okamžitý záznam s fotkou, večerní ohlédnutí s rozvrhem dne, shrnutí a snímek dne ke sdílení, oslava dne s animacemi a sdílením, prosba blízkému člověku, týdenní ohlédnutí s WHO-5, barva dne, detail a doplňování záznamů, pomoc, připomínka do kalendáře, nastavení se zálohou.
 
 ## Co je v kterém souboru
 
