@@ -85,6 +85,7 @@ const IKONA = {
   tuzka: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1-4L16 5l3 3L8 19l-4 1zM14 7l3 3"/></svg>',
   mikrofon: '<svg class="mikrofon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
   fotak: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+  mesic: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M19 15a8 8 0 0 1-10-10 8 8 0 1 0 10 10z"/></svg>',
   galerie: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="M5 18l5-5 3 3 2-2 4 4"/></svg>',
   domov: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/></svg>',
   prehled: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',
@@ -276,6 +277,72 @@ function navigace(aktivni) {
     '</nav>';
 }
 
+// ---------------- SEZNAM ZÁZNAMŮ ----------------
+
+// Krátký popis záznamu ze všeho, co v něm je. „beze slov“ jen tehdy,
+// když opravdu není co ukázat.
+function shrnutiZaznamu(z) {
+  const casti = [];
+  const blok = z.typ === 'vecerni' && z.poradi != null;
+  if (blok) casti.push(z.popis_bloku || (z.cinnost || []).join(' + '));
+  if (z.emoce.length) casti.push(z.emoce.map(e => e.slovo + (e.intenzita != null ? ' ' + e.intenzita : '')).join(', '));
+  if (z.vlastni_slova) casti.push(z.vlastni_slova.length > 80 ? z.vlastni_slova.slice(0, 80) + '…' : z.vlastni_slova);
+  if (z.telo.length) casti.push('tělo: ' + z.telo.map(t => t.pocit).join(', '));
+  if (z.potreby.length) casti.push('potřeby: ' + z.potreby.map(p => p.potreba).join(', '));
+  if (!blok && (z.cinnost || []).length) casti.push(z.cinnost.join(', '));
+  if (z.strategie) casti.push('co by pomohlo: ' + z.strategie);
+  if (z.prosba) casti.push('prosba: ' + z.prosba);
+  if (z.vyzkum) casti.push('otázky pro výzkum');
+  const text = casti.filter(Boolean).join(' · ');
+  if (!text && z.fotka) return 'fotka';
+  return text || 'beze slov';
+}
+
+// Seskupí večerní záznamy podle dne do jednoho balíčku; okamžité zůstanou samostatně.
+function polozkySeznamu(zaznamy) {
+  const polozky = [], vecery = new Map();
+  for (const z of zaznamy) {
+    if (z.typ !== 'vecerni') { polozky.push({ druh: 'zaznam', z, kdy: z.upraveno || z.vytvoreno }); continue; }
+    const datum = z.chvile_od.slice(0, 10);
+    if (!vecery.has(datum)) {
+      const balicek = { druh: 'vecer', datum, zaznamy: [], kdy: '' };
+      vecery.set(datum, balicek);
+      polozky.push(balicek);
+    }
+    const b = vecery.get(datum);
+    b.zaznamy.push(z);
+    const k = z.upraveno || z.vytvoreno;
+    if (k > b.kdy) b.kdy = k;
+  }
+  return polozky.sort((a, b) => b.kdy.localeCompare(a.kdy));
+}
+
+function znamkaPrijemnosti(p) {
+  const trida = p == null ? '' : p > 0 ? ' prijemna' : p < 0 ? ' neprijemna' : '';
+  return '<span class="znamka' + trida + '" aria-label="Příjemnost ' + (p ?? 'nevyplněna') + '">' + (p == null ? '–' : p > 0 ? '+' + p : p) + '</span>';
+}
+
+function radekSeznamu(polozka) {
+  if (polozka.druh === 'zaznam') {
+    const z = polozka.z;
+    return '<a class="zaznam-radek" href="#/detail/' + encodeURIComponent(z.id) + '">' + znamkaPrijemnosti(z.prijemnost) +
+      '<div><div class="tlumene male">' + popisCasu(z) + '</div><div>' + h(shrnutiZaznamu(z)) + '</div></div>' +
+      (z.fotka ? '<img class="miniatura" src="' + urlFotky(z.fotka) + '" alt="">' : '<span class="sipka" aria-hidden="true">›</span>') + '</a>';
+  }
+  // Balíček večerního ohlédnutí: aktivity pod sebou
+  const bloky = polozka.zaznamy.filter(z => z.poradi != null).sort((a, b) => a.poradi - b.poradi);
+  const doplneni = polozka.zaznamy.filter(z => z.poradi == null);
+  const d = new Date(polozka.datum + 'T12:00:00');
+  const kdy = polozka.datum === U.datumDne() ? 'dnes' : d.getDate() + '. ' + (d.getMonth() + 1) + '.';
+  const radky = bloky.map(z => '<li>' + h(z.popis_bloku || (z.cinnost || []).join(' + ') || 'blok') +
+    (z.chvile_delka_min ? ' <span class="tlumene">· ' + h(delkaText(z.chvile_delka_min)) + '</span>' : '') +
+    (z.prijemnost != null ? ' <span class="tlumene">· ' + (z.prijemnost > 0 ? '+' + z.prijemnost : z.prijemnost) + '</span>' : '') + '</li>').join('') +
+    doplneni.map(z => '<li class="tlumene">' + h(shrnutiZaznamu(z)) + '</li>').join('');
+  return '<a class="zaznam-radek" href="#/vecer/' + polozka.datum + '"><span class="znamka" aria-hidden="true">' + IKONA.mesic + '</span>' +
+    '<div><div class="tlumene male">' + kdy + ' · večerní ohlédnutí</div><ul class="balicek">' + radky + '</ul></div>' +
+    '<span class="sipka" aria-hidden="true">›</span></a>';
+}
+
 // ---------------- DOMOV ----------------
 async function obrazovkaDomov() {
   const vse = (await U.vsechnyZaznamy()).sort((a, b) => (b.upraveno || b.vytvoreno).localeCompare(a.upraveno || a.vytvoreno));
@@ -309,18 +376,8 @@ async function obrazovkaDomov() {
         ' aria-label="' + popisek + '">' + (pocet || '') + '</span>' + zkratky[i] + '</a>';
   }
 
-  // Posledních pět záznamů
-  let seznam = '';
-  for (const z of vse.slice(0, 5)) {
-    const p = z.prijemnost;
-    const trida = p == null ? '' : p > 0 ? ' prijemna' : p < 0 ? ' neprijemna' : '';
-    const popis = z.emoce.length
-      ? z.emoce.map(e => e.slovo + (e.intenzita != null ? ' ' + e.intenzita : '')).join(', ')
-      : (z.vlastni_slova ? z.vlastni_slova.slice(0, 80) + (z.vlastni_slova.length > 80 ? '…' : '') : (z.fotka ? '' : 'beze slov'));
-    seznam += '<a class="zaznam-radek" href="#/detail/' + encodeURIComponent(z.id) + '"><span class="znamka' + trida + '" aria-label="Příjemnost ' + (p ?? 'nevyplněna') + '">' +
-      (p == null ? '–' : p > 0 ? '+' + p : p) + '</span><div><div class="tlumene male">' + casZaznamu(z.chvile_od) +
-      '</div><div>' + h(popis) + (z.fotka ? ' <span class="tlumene">· fotka</span>' : '') + '</div></div><span class="sipka" aria-hidden="true">›</span></a>';
-  }
+  // Posledních pět položek. Večerní ohlédnutí jednoho dne = jeden balíček.
+  const seznam = polozkySeznamu(vse).slice(0, 5).map(radekSeznamu).join('');
 
   const rozepsano = maObsah(koncept) && !koncept.ulozeno
     ? '<a class="tlacitko jemne" href="#/zaznam">Pokračovat v rozepsaném záznamu</a>' : '';
@@ -544,9 +601,9 @@ function obrazovkaZaznamDal() {
           '<div class="cipy">' + skupiny + '</div>' + vlastniPotreba + potrebyPanel +
           (sklenicky ? '<div class="vybrane">' + sklenicky + '</div><p class="tlumene male">Dlouhým podržením názvu potřebu změníš nebo odstraníš.</p>' : '')],
         ['kolem', k.cinnost.length || k.sKym.length || k.kde, 'Co se děje kolem?',
-          '<span class="panel-nadpis">Co právě děláš?</span><div class="cipy">' + cinnosti + '</div>' +
-          '<span class="panel-nadpis">S kým?</span><div class="cipy">' + skym + '</div>' +
-          '<span class="panel-nadpis">Kde?</span><div class="cipy">' + kde + '</div>'],
+          '<div class="oddil"><h3 class="oddil-nadpis">Co právě děláš?</h3><div class="cipy">' + cinnosti + '</div></div>' +
+          '<div class="oddil"><h3 class="oddil-nadpis">S kým?</h3><div class="cipy">' + skym + '</div></div>' +
+          '<div class="oddil"><h3 class="oddil-nadpis">Kde?</h3><div class="cipy">' + kde + '</div></div>'],
         ['pomuze', k.strategie || k.prosba, 'Co by Ti teď mohlo udělat dobře?',
           poleSDiktovanim('strategie', 'Co by Ti teď mohlo udělat dobře?', 'Třeba procházka, napsat kamarádce, chvíli ticha…') +
           '<label class="panel-nadpis" for="prosba">Chceš o něco konkrétního požádat – sebe nebo někoho jiného?</label>' +
@@ -577,14 +634,17 @@ function tlacitkoDiktovani(cil) {
 
 // Cíl „blok:3“ = vlastní slova ke třetímu bloku večerního ohlédnutí.
 function hodnotaCile(cil) {
+  if (cil === 'blokpopis') return vecer.rozpracovany.popis;
   if (cil.startsWith('blok:')) return vecer.bloky[+cil.slice(5)].text;
   return koncept[cil];
 }
 function nastavCil(cil, text) {
-  if (cil.startsWith('blok:')) vecer.bloky[+cil.slice(5)].text = text;
+  if (cil === 'blokpopis') vecer.rozpracovany.popis = text;
+  else if (cil.startsWith('blok:')) vecer.bloky[+cil.slice(5)].text = text;
   else koncept[cil] = text;
 }
 function idPoleCile(cil) {
+  if (cil === 'blokpopis') return 'blok-popis';
   return cil.startsWith('blok:') ? 'blok-text-' + cil.slice(5) : ID_POLE[cil];
 }
 
@@ -668,6 +728,15 @@ const BARVY_DNE = [
   '#B9AE9E', '#5E6B65', '#1F2A26', '#FFFDF9'
 ];
 
+// Paleta barev dne. Vlastní barva (z „Jiná barva…“) se ukáže jako
+// další kolečko na konci, zatržené – ať je vidět, co je zvolené.
+function paletaBarev(datum, zvolena) {
+  const barvy = zvolena && !BARVY_DNE.includes(zvolena) ? [...BARVY_DNE, zvolena] : BARVY_DNE;
+  return '<div class="vzorky">' + barvy.map(b => '<button type="button" class="vzorek" data-akce="barvaDne" data-datum="' + datum +
+    '" data-barva="' + b + '" aria-pressed="' + (zvolena === b) + '" aria-label="Barva ' + b + (BARVY_DNE.includes(b) ? '' : ' (vlastní)') +
+    '" style="background:' + b + ';color:' + inkoustPro(b) + '">' + (zvolena === b ? '✓' : '') + '</button>').join('') + '</div>';
+}
+
 // Světlost barvy (0 tmavá … 1 světlá) podle pravidel přístupnosti WCAG.
 function svetlost(hex) {
   const c = [1, 3, 5].map(i => {
@@ -690,17 +759,12 @@ async function obrazovkaDen(datum) {
 
   let barvy = '';
   if (nastaveni.barva_dne_zapnuta) {
-    const vzorky = BARVY_DNE.map(b => '<button type="button" class="vzorek" data-akce="barvaDne" data-datum="' + datum + '" data-barva="' + b +
-      '" aria-pressed="' + (den.barva === b) + '" aria-label="Barva ' + b + '" style="background:' + b + ';color:' + inkoustPro(b) + '">' +
-      (den.barva === b ? '✓' : '') + '</button>').join('');
-    const vlastni = den.barva && !BARVY_DNE.includes(den.barva);
     barvy = '<section class="karta"><h2>Jakou barvu měl Tvůj den?</h2>' +
-      '<div class="vzorky">' + vzorky + '</div>' +
+      paletaBarev(datum, den.barva) +
       '<div class="odkazy"><label class="tlacitko obrys male-t" style="cursor:pointer">Jiná barva…' +
         '<input type="color" class="skryte" data-akce="barvaVlastni" data-datum="' + datum + '" value="' + (den.barva || '#72B97F') + '"></label>' +
         (den.barva ? '<button type="button" class="tlacitko obrys male-t" data-akce="barvaDne" data-datum="' + datum + '" data-barva="">Bez barvy</button>' : '') +
       '</div>' +
-      (vlastni ? '<p class="tlumene male">Vlastní barva: <span class="vzorek-maly" style="background:' + den.barva + '"></span></p>' : '') +
       '<p class="tlumene male">Barvu si volíš ' + tvar('sama', 'sám') + ' a kdykoli ji změníš. Vypnout ji jde v Nastavení.</p></section>';
   }
 
@@ -708,15 +772,7 @@ async function obrazovkaDen(datum) {
   const pozadi = nastaveni.barva_dne_zapnuta && den.barva ? den.barva : null;
   const motiv = pozadi ? ' style="background:' + pozadi + ';color:' + inkoustPro(pozadi) + ';border-color:' + pozadi + '"' : '';
 
-  let seznam = '';
-  for (const z of zaznamy) {
-    const p = z.prijemnost;
-    const popis = z.emoce.length ? z.emoce.map(e => e.slovo).join(', ') : (z.vlastni_slova || (z.fotka ? 'fotka' : 'beze slov'));
-    seznam += '<a class="zaznam-radek" href="#/detail/' + encodeURIComponent(z.id) + '"><span class="znamka">' +
-      (p == null ? '–' : p > 0 ? '+' + p : p) + '</span><div><div class="tlumene male">' +
-      (z.typ === 'vecerni' ? 'večer' : new Date(z.chvile_od).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' })) + '</div><div>' +
-      h(popis.slice(0, 80)) + '</div></div><span class="sipka" aria-hidden="true">›</span></a>';
-  }
+  const seznam = polozkySeznamu(zaznamy).map(radekSeznamu).join('');
 
   return '<header class="hlavicka">' +
       '<a class="ikona-tlacitko bez-okraje" href="#/domov" aria-label="Zpět na Domov">' + IKONA.zpet + '</a>' +
@@ -750,7 +806,7 @@ function denOhlednuti() {
 }
 
 function novyBlok() {
-  return { id: U.noveId(), vytvoreno: U.tedS(), cinnost: null, delkaMin: null, sKym: [], kde: null,
+  return { id: U.noveId(), vytvoreno: U.tedS(), popis: '', cinnost: [], delkaMin: null, sKym: [], kde: null,
     hodnotit: false, prijemnost: null, text: '', smysluplnost: null, vyzkum: {}, ulozeny: false };
 }
 
@@ -767,14 +823,24 @@ async function pripravVecer(datum) {
     rozpracovany: null,
     vlastniCinnost: false,
     bloky: zaznamy.map(z => ({
-      id: z.id, vytvoreno: z.vytvoreno, cinnost: (z.cinnost || [])[0] || null, delkaMin: z.chvile_delka_min,
+      id: z.id, vytvoreno: z.vytvoreno, popis: z.popis_bloku || '', cinnost: [...(z.cinnost || [])], delkaMin: z.chvile_delka_min,
       sKym: z.s_kym || [], kde: z.kde, hodnotit: z.prijemnost != null || !!z.vlastni_slova,
       prijemnost: z.prijemnost, text: z.vlastni_slova || '', smysluplnost: z.smysluplnost ?? null,
       vyzkum: Object.fromEntries(Object.entries(z.vyzkum || {}).filter(([, v]) => v != null)),
       ulozeny: true, puvodni: z
     }))
   };
-  if (!vecer.bloky.length) { vecer.upravovany = 'novy'; vecer.rozpracovany = novyBlok(); }
+  const den = await U.nactiDen(datum);
+  if (vecer.bloky.length && den && den.vecerni_hotovo) vecer.krok = 'shrnuti';
+  if (!vecer.bloky.length) {
+    // Je k dispozici rozvrh z některého dřívějšího dne? Pak se nejdřív zeptáme.
+    const drivejsi = (await U.vsechnyZaznamy())
+      .filter(z => z.typ === 'vecerni' && z.poradi != null && z.chvile_od.slice(0, 10) < datum)
+      .map(z => z.chvile_od.slice(0, 10)).sort();
+    vecer.predchoziDen = drivejsi.length ? drivejsi[drivejsi.length - 1] : null;
+    if (vecer.predchoziDen) vecer.krok = 'start';
+    else { vecer.upravovany = 'novy'; vecer.rozpracovany = novyBlok(); }
+  }
 }
 
 function delkaText(min) {
@@ -783,7 +849,17 @@ function delkaText(min) {
 }
 
 function popisBloku(b) {
-  return [b.cinnost || 'bez činnosti', delkaText(b.delkaMin), b.sKym.join(', '), b.kde].filter(Boolean).join(' · ');
+  return [nazevBloku(b), delkaText(b.delkaMin), b.sKym.join(', '), b.kde].filter(Boolean).join(' · ');
+}
+
+// Jedna nebo víc činností zároveň („práce + učení se něčemu novému“).
+function nazevBloku(b, nahradni = 'bez činnosti') {
+  return b.cinnost.length ? b.cinnost.join(' + ') : nahradni;
+}
+
+// Nadpis bloku: vlastní slova, když jsou, jinak činnosti.
+function titulekBloku(b, nahradni) {
+  return b.popis && b.popis.trim() ? b.popis.trim() : nazevBloku(b, nahradni);
 }
 
 // Aplikace vybere 2–3 chvíle: nejdelší bloky, každý s jinou činností.
@@ -794,13 +870,14 @@ function vyberChvile() {
   let pocet = 0;
   for (const { b } of serazene) {
     if (pocet >= 3) break;
-    if (cinnosti.has(b.cinnost) && serazene.length > 3) continue;
-    b.hodnotit = true; cinnosti.add(b.cinnost); pocet++;
+    const klic = b.cinnost.join('+');
+    if (cinnosti.has(klic) && serazene.length > 3) continue;
+    b.hodnotit = true; cinnosti.add(klic); pocet++;
   }
 }
 
 // Uloží všechny bloky jako záznamy (nové přidá, upravené přepíše).
-async function ulozVecer() {
+async function ulozVecer(hotovo = true) {
   const zacatekDne = U.tedS(new Date(vecer.datum + 'T00:00:00'));
   for (let i = 0; i < vecer.bloky.length; i++) {
     const b = vecer.bloky[i];
@@ -812,7 +889,7 @@ async function ulozVecer() {
       vlastni_slova: b.hodnotit ? b.text.trim() : '',
       smysluplnost: b.hodnotit ? b.smysluplnost : null,
       vyzkum: b.hodnotit && Object.keys(b.vyzkum).length ? Object.fromEntries(S.VYZKUM.map(v => [v.klic, b.vyzkum[v.klic] ?? null])) : null,
-      cinnost: b.cinnost ? [b.cinnost] : [], s_kym: b.sKym, kde: b.kde,
+      popis_bloku: b.popis.trim(), cinnost: [...b.cinnost], s_kym: b.sKym, kde: b.kde,
       emoce: zaklad.emoce || [], telo: zaklad.telo || [], potreby: zaklad.potreby || [],
       strategie: zaklad.strategie || '', prosba: zaklad.prosba || '', fotka: zaklad.fotka || null,
       zdroj_textu: b.text.trim() ? (zaklad.zdroj_textu || 'psano') : null,
@@ -825,31 +902,39 @@ async function ulozVecer() {
   for (const id of vecer.smazane || []) await U.smazZaznam(id);
   vecer.smazane = [];
   const den = (await U.nactiDen(vecer.datum)) || { datum: vecer.datum, barva: null, vecerni_hotovo: false, poznamka: '' };
-  den.vecerni_hotovo = true;
+  if (hotovo) den.vecerni_hotovo = true;
   await U.ulozDen(den);
 }
 
 // Editor jednoho bloku (nový nebo upravovaný).
 function editorBloku(b) {
-  const cinnosti = S.CINNOSTI.map(c => cip(c, b.cinnost === c, 'blokCinnost', { slovo: c })).join('') +
-    (b.cinnost && !S.CINNOSTI.includes(b.cinnost) ? cip(b.cinnost, true, 'blokCinnost', { slovo: b.cinnost }) : '') +
+  const cinnosti = S.CINNOSTI.map(c => cip(c, b.cinnost.includes(c), 'blokCinnost', { slovo: c })).join('') +
+    b.cinnost.filter(c => !S.CINNOSTI.includes(c)).map(c => cip(c, true, 'blokCinnost', { slovo: c })).join('') +
     '<button type="button" class="cip pridat" data-akce="blokVlastniOtevrit">+ vlastní</button>';
   const vlastni = vecer.vlastniCinnost
     ? '<div class="pole-radek"><input class="vstup" id="vlastni-cinnost" placeholder="Co jsi ' + tvar('dělala', 'dělal') + '?" autocomplete="off">' +
       '<button type="button" class="tlacitko male-t" data-akce="blokVlastniPridat">Přidat</button></div>' : '';
+  // Každá otázka je samostatný oddíl s čárou nahoře, ať je jasné, kde která nabídka končí.
+  const oddil = (nadpis, obsah, pro) => '<div class="oddil">' +
+    (pro ? '<label class="oddil-nadpis" for="' + pro + '">' : '<h3 class="oddil-nadpis">') + nadpis + (pro ? '</label>' : '</h3>') + obsah + '</div>';
   return '<section class="karta">' +
     '<h2>' + (vecer.upravovany === 'novy' ? 'Další blok dne' : 'Upravit blok') + '</h2>' +
-    '<span class="panel-nadpis">Co jsi ' + tvar('dělala', 'dělal') + '?</span><div class="cipy">' + cinnosti + '</div>' + vlastni +
-    '<span class="panel-nadpis">Jak dlouho zhruba?</span><div class="cipy">' +
-      S.DELKY.map(d => cip(d.text, b.delkaMin === d.min, 'blokDelka', { min: d.min })).join('') + '</div>' +
-    '<span class="panel-nadpis">S kým? (nepovinné)</span><div class="cipy">' +
-      S.S_KYM.map(c => cip(c, b.sKym.includes(c), 'blokSKym', { slovo: c })).join('') + '</div>' +
-    '<span class="panel-nadpis">Kde? (nepovinné)</span><div class="cipy">' +
-      S.KDE.map(c => cip(c, b.kde === c, 'blokKde', { slovo: c })).join('') + '</div>' +
+    oddil('Co jsi ' + tvar('dělala', 'dělal') + '? <span class="oddil-pozn">Můžeš vybrat i víc věcí, které běžely zároveň.</span>',
+      '<div class="cipy">' + cinnosti + '</div>' + vlastni) +
+    oddil('Vlastními slovy <span class="oddil-pozn">nepovinné – ať víš, který kus dne to byl</span>',
+      '<div class="pole"><textarea id="blok-popis" rows="2" data-blok-popis="1" placeholder="Třeba: dopolední porada, psaní zprávy…">' + h(b.popis) + '</textarea>' +
+      (tlacitkoDiktovani('blokpopis') ? '<div class="pole-radek"><span></span>' + tlacitkoDiktovani('blokpopis') + '</div>' : '') + '</div>', 'blok-popis') +
+    oddil('Jak dlouho zhruba?', '<div class="cipy">' + S.DELKY.map(d => cip(d.text, b.delkaMin === d.min, 'blokDelka', { min: d.min })).join('') + '</div>') +
+    oddil('S kým? <span class="oddil-pozn">nepovinné</span>', '<div class="cipy">' + S.S_KYM.map(c => cip(c, b.sKym.includes(c), 'blokSKym', { slovo: c })).join('') + '</div>') +
+    oddil('Kde? <span class="oddil-pozn">nepovinné</span>', '<div class="cipy">' + S.KDE.map(c => cip(c, b.kde === c, 'blokKde', { slovo: c })).join('') + '</div>') +
     '<div class="odkazy"><button type="button" class="tlacitko male-t" data-akce="blokHotovo">' +
       (vecer.upravovany === 'novy' ? 'Přidat do dne' : 'Hotovo') + '</button>' +
       (vecer.bloky.length ? '<button type="button" class="tlacitko obrys male-t" data-akce="blokZrusit">Zrušit</button>' : '') +
       (vecer.upravovany !== 'novy' ? '<button type="button" class="tlacitko obrys male-t" data-akce="blokOdebrat">Odebrat blok</button>' : '') +
+      (vecer.upravovany !== 'novy' && vecer.bloky.length > 1
+        ? '<button type="button" class="tlacitko obrys male-t" data-akce="blokPosun" data-smer="-1"' + (vecer.upravovany === 0 ? ' disabled' : '') + '>Posunout výš</button>' +
+          '<button type="button" class="tlacitko obrys male-t" data-akce="blokPosun" data-smer="1"' + (vecer.upravovany === vecer.bloky.length - 1 ? ' disabled' : '') + '>Posunout níž</button>'
+        : '') +
     '</div></section>';
 }
 
@@ -870,25 +955,42 @@ async function obrazovkaVecer(parametr) {
   await pripravVecer(datum);
   const v = vecer;
 
+  // ---- 0. nový rozvrh, nebo předchozí? ----
+  if (v.krok === 'start') {
+    const d = new Date(v.predchoziDen + 'T12:00:00');
+    const kdy = d.getDate() + '. ' + (d.getMonth() + 1) + '. (' + new Intl.DateTimeFormat('cs-CZ', { weekday: 'long' }).format(d) + ')';
+    return hlavickaVecera(nazevDneVecera(), '#/domov') +
+      '<main class="obsah">' +
+        '<h1 style="font-size:26px">Jak chceš začít?</h1>' +
+        '<button type="button" class="karta" style="text-align:left;cursor:pointer;font:inherit" data-akce="vecerNacist">' +
+          '<h2>Načíst předchozí rozvrh</h2><p class="tlumene">Rozvrh ze dne ' + h(kdy) + '. Bloky si pak upravíš. Hodnocení chvil se nepřebírá.</p></button>' +
+        '<button type="button" class="karta" style="text-align:left;cursor:pointer;font:inherit" data-akce="vecerNovy">' +
+          '<h2>Nový rozvrh</h2><p class="tlumene">Začneš s prázdným dnem.</p></button>' +
+      '</main>';
+  }
+
   // ---- 1. bloky ----
   if (v.krok === 'bloky') {
     let seznam = '';
     v.bloky.forEach((b, i) => {
       if (v.upravovany === i) { seznam += editorBloku(v.rozpracovany); return; }
-      seznam += '<button type="button" class="zaznam-radek" style="text-align:left;width:100%;cursor:pointer" data-akce="blokUpravit" data-index="' + i + '">' +
-        '<span class="znamka">' + (i + 1) + '</span><div>' + h(popisBloku(b)) + '</div><span class="sipka" aria-hidden="true">›</span></button>';
+      seznam += '<button type="button" class="zaznam-radek blok-radek" style="text-align:left;width:100%;cursor:pointer" data-akce="blokUpravit" data-index="' + i + '" data-blok-index="' + i + '">' +
+        '<span class="znamka">' + (i + 1) + '</span><div>' + (b.popis.trim() ? '<div style="font-weight:600">' + h(b.popis.trim()) + '</div><div class="tlumene male">' + h(popisBloku(b)) + '</div>' : h(popisBloku(b))) +
+        '</div><span class="sipka" aria-hidden="true">›</span></button>';
     });
     const novy = v.upravovany === 'novy' ? editorBloku(v.rozpracovany) : '';
     const pridat = v.upravovany === null
       ? '<button type="button" class="tlacitko obrys" style="align-self:flex-start" data-akce="blokNovy">+ Přidat další blok</button>' : '';
     return hlavickaVecera(nazevDneVecera(), '#/domov') +
       '<main class="obsah">' +
-        '<div><h1 style="font-size:26px">Co jsi dnes ' + tvar('dělala', 'dělal') + '?</h1>' +
-        '<p class="tlumene">Rozlož si den do bloků, jak šly po sobě. Stačí zhruba – spánek vynech.</p></div>' +
-        (seznam ? '<div class="seznam">' + seznam + '</div>' : '') + novy + pridat +
+        '<div><h1 style="font-size:26px">Co jsi ' + (v.datum === U.datumDne() ? 'dnes' : 'ten den') + ' ' + tvar('dělala', 'dělal') + '?</h1>' +
+        '<p class="tlumene">Rozlož si den do bloků, jak šly po sobě. Stačí zhruba – noční spánek se nezapisuje.</p></div>' +
+        (seznam ? '<div class="seznam" id="seznam-bloku">' + seznam + '</div>' +
+          (v.bloky.length > 1 && v.upravovany === null ? '<p class="tlumene male">Pořadí změníš, když blok podržíš a přetáhneš nahoru nebo dolů.</p>' : '') : '') + novy + pridat +
       '</main>' +
-      '<footer class="spodni-lista">' +
-        '<a class="tlacitko obrys" href="#/domov">Později</a>' +
+      '<footer class="spodni-lista tri">' +
+        '<button type="button" class="tlacitko obrys" data-akce="vecerOdlozit">Odložit</button>' +
+        '<button type="button" class="tlacitko obrys" data-akce="vecerUlozitRozvrh"' + (v.bloky.length ? '' : ' disabled') + '>Uložit</button>' +
         '<button type="button" class="tlacitko" data-akce="vecerDal"' + (v.bloky.length ? '' : ' disabled') + '>Dál</button>' +
       '</footer>';
   }
@@ -919,7 +1021,7 @@ async function obrazovkaVecer(parametr) {
       }
       const cil = 'blok:' + i;
       karty += '<section class="karta">' +
-        '<div class="karta-radek"><h2>' + h(b.cinnost || 'Chvíle') + '</h2><button type="button" class="tlacitko obrys male-t" data-akce="blokNehodnotit" data-index="' + i + '">Vynechat</button></div>' +
+        '<div class="karta-radek"><h2>' + h(titulekBloku(b, 'Chvíle')) + '</h2><button type="button" class="tlacitko obrys male-t" data-akce="blokNehodnotit" data-index="' + i + '">Vynechat</button></div>' +
         '<p class="tlumene male">' + h(popisBloku(b)) + '</p>' +
         '<span class="panel-nadpis">Jaká chvíle to pro Tebe byla?</span>' +
         '<div class="skala" role="group" aria-label="Od −3 do +3">' + skala + '</div>' +
@@ -935,7 +1037,7 @@ async function obrazovkaVecer(parametr) {
     const ostatni = v.bloky.map((b, i) => ({ b, i })).filter(x => !x.b.hodnotit);
     const dalsi = ostatni.length
       ? '<section class="karta"><h2>Chceš popsat i další chvíle?</h2><div class="cipy">' +
-        ostatni.map(({ b, i }) => '<button type="button" class="cip" data-akce="blokHodnotit" data-index="' + i + '">' + h(b.cinnost || 'blok ' + (i + 1)) + ' · ' + h(delkaText(b.delkaMin)) + '</button>').join('') +
+        ostatni.map(({ b, i }) => '<button type="button" class="cip" data-akce="blokHodnotit" data-index="' + i + '">' + h(titulekBloku(b, 'blok ' + (i + 1))) + ' · ' + h(delkaText(b.delkaMin)) + '</button>').join('') +
         '</div></section>' : '';
     return hlavickaVecera(nazevDneVecera(), '#/vecer/' + v.datum) +
       '<main class="obsah">' +
@@ -951,12 +1053,9 @@ async function obrazovkaVecer(parametr) {
   // ---- 3. barva dne ----
   if (v.krok === 'barva') {
     const den = (await U.nactiDen(v.datum)) || {};
-    const vzorky = BARVY_DNE.map(b => '<button type="button" class="vzorek" data-akce="barvaDne" data-datum="' + v.datum + '" data-barva="' + b +
-      '" aria-pressed="' + (den.barva === b) + '" aria-label="Barva ' + b + '" style="background:' + b + ';color:' + inkoustPro(b) + '">' +
-      (den.barva === b ? '✓' : '') + '</button>').join('');
     return hlavickaVecera(nazevDneVecera(), '#/vecer/' + v.datum) +
       '<main class="obsah"><section class="karta"><h1 style="font-size:26px">Jakou barvu měl Tvůj den?</h1>' +
-        '<div class="vzorky">' + vzorky + '</div>' +
+        paletaBarev(v.datum, den.barva) +
         '<div class="odkazy"><label class="tlacitko obrys male-t" style="cursor:pointer">Jiná barva…' +
           '<input type="color" class="skryte" data-akce="barvaVlastni" data-datum="' + v.datum + '" value="' + (den.barva || '#72B97F') + '"></label>' +
           (den.barva ? '<button type="button" class="tlacitko obrys male-t" data-akce="barvaDne" data-datum="' + v.datum + '" data-barva="">Bez barvy</button>' : '') +
@@ -978,16 +1077,21 @@ async function obrazovkaVecer(parametr) {
   }
   const hodiny = m => m >= 60 ? (Math.round(m / 6) / 10).toString().replace('.', ',') + ' h' : m + ' min';
   const motiv = nastaveni.barva_dne_zapnuta && den.barva ? ' style="background:' + den.barva + ';color:' + inkoustPro(den.barva) + ';border-color:' + den.barva + '"' : '';
-  const radkyChvil = hodnocene.map(b => '<li>' + h(b.cinnost || 'chvíle') + ': ' + (b.prijemnost > 0 ? '+' + b.prijemnost : b.prijemnost) +
+  const radkyChvil = hodnocene.map(b => '<li>' + h(titulekBloku(b, 'chvíle')) + ': ' + (b.prijemnost > 0 ? '+' + b.prijemnost : b.prijemnost) +
     (b.text.trim() ? ' – „' + h(b.text.trim().slice(0, 60)) + (b.text.trim().length > 60 ? '…' : '') + '“' : '') + '</li>').join('');
+
+  // Všechny záznamy toho dne – okamžité i večerní (kvůli fotkám a průběhu dne)
+  const zaznamyDne = (await U.vsechnyZaznamy()).filter(z => z.chvile_od.slice(0, 10) === v.datum);
+  const okamzite = zaznamyDne.filter(z => z.typ !== 'vecerni').sort((a, b) => a.chvile_od.localeCompare(b.chvile_od));
+  const sFotkou = [...okamzite, ...zaznamyDne.filter(z => z.typ === 'vecerni')].filter(z => z.fotka);
 
   // Co ještě jde doplnit
   const nabidka = [];
   if (v.bloky.some(b => !b.hodnotit)) nabidka.push(['chvile', 'Popsat další chvíle']);
   // Co už k tomuto dni doplněné je, znovu nenabízíme.
-  const doplneni = (await U.vsechnyZaznamy()).filter(z => z.typ === 'vecerni' && z.poradi == null && z.chvile_od.slice(0, 10) === v.datum);
+  const doplneni = zaznamyDne.filter(z => z.typ === 'vecerni' && z.poradi == null);
   if (!doplneni.some(z => z.telo.length)) nabidka.push(['telo', 'Co se dnes dělo v těle']);
-  if (!doplneni.some(z => z.potreby.length)) nabidka.push(['potreby', 'Jak plné jsou teď Tvoje skleničky']);
+  if (!doplneni.some(z => z.potreby.length)) nabidka.push(['potreby', 'Jak jsou právě naplněné Tvé potřeby?']);
   if (!doplneni.some(z => z.strategie || z.prosba)) nabidka.push(['pomuze', 'Co by Ti teď mohlo udělat dobře']);
 
   return hlavickaVecera(nazevDneVecera(), '#/domov') +
@@ -998,12 +1102,368 @@ async function obrazovkaVecer(parametr) {
         (hodnocene.length ? '<p>Z popsaných chvil: příjemný čas ' + hodiny(cas.prijemny) + ', neutrální ' + hodiny(cas.neutralni) + ', nepříjemný ' + hodiny(cas.neprijemny) + '.</p>' +
           '<ul style="margin:0;padding-left:20px">' + radkyChvil + '</ul>' : '<p>Chvíle zatím nejsou popsané.</p>') +
       '</section>' +
+      grafBloku(v.bloky, hodiny) +
+      grafOkamzitych(okamzite) +
+      nahledyFotek(sFotkou) +
       '<p class="tlumene male">Uloženo jen v tomto telefonu. Není to hodnocení – jen obrázek dne.</p>' +
+      panelSdileni(v, okamzite, hodiny, cas, celkem, hodnocene, sFotkou, nastaveni.barva_dne_zapnuta ? den.barva : null) +
       (nabidka.length ? '<section class="karta"><h2>Chceš zaznamenat ještě něco dalšího?</h2><div class="cipy">' +
         nabidka.map(([cast, text]) => '<button type="button" class="cip" data-akce="vecerDoplnit" data-cast="' + cast + '">' + h(text) + '</button>').join('') +
       '</div></section>' : '') +
-      '<a class="tlacitko obrys" href="#/domov" style="align-self:flex-start">Pro teď to stačí</a>' +
+      '<div class="odkazy"><a class="tlacitko obrys" href="#/domov">Pro teď to stačí</a>' +
+      '<button type="button" class="tlacitko obrys" data-akce="vecerZpet">Upravit rozvrh dne</button></div>' +
     '</main>';
+}
+
+// ---------------- SDÍLENÍ SHRNUTÍ DNE ----------------
+// Sdílí se jen na pokyn člověka a jen text, který vidí v náhledu.
+// Odchází přes běžné sdílení telefonu (zpráva, e-mail, chat) – aplikace
+// sama nic neposílá. Fotky a vlastní slova jsou ve výchozím stavu vypnuté.
+let sdileni = { otevreno: false, slova: false, okamzite: false, fotky: true, titulek: '', format: 'prispevek', obrazek: null, klicObrazku: null, pripravuji: false };
+
+function textSdileni(v, okamzite, hodiny, cas, celkem, hodnocene) {
+  const d = new Date(v.datum + 'T12:00:00');
+  const radky = ['Snímek dne ' + d.getDate() + '. ' + (d.getMonth() + 1) + '. (z aplikace Mám se!)'];
+  radky.push(v.bloky.length + ' ' + (v.bloky.length === 1 ? 'blok' : v.bloky.length < 5 ? 'bloky' : 'bloků') + (celkem ? ', zhruba ' + hodiny(celkem) : ''));
+  if (hodnocene.length) {
+    radky.push('Příjemný čas ' + hodiny(cas.prijemny) + ', neutrální ' + hodiny(cas.neutralni) + ', nepříjemný ' + hodiny(cas.neprijemny) + '.');
+    for (const b of hodnocene) {
+      radky.push('• ' + titulekBloku(b, 'chvíle') + ': ' + (b.prijemnost > 0 ? '+' + b.prijemnost : b.prijemnost) +
+        (sdileni.slova && b.text.trim() ? ' – ' + b.text.trim() : ''));
+    }
+  }
+  if (sdileni.okamzite && okamzite.length) {
+    radky.push('Během dne:');
+    for (const z of okamzite) {
+      const cas2 = new Date(z.chvile_od).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
+      const p = z.prijemnost == null ? '' : ' ' + (z.prijemnost > 0 ? '+' + z.prijemnost : z.prijemnost);
+      const slova = [z.emoce.map(e => e.slovo).join(', '), sdileni.slova ? z.vlastni_slova : ''].filter(Boolean).join(' – ');
+      radky.push('• ' + cas2 + p + (slova ? ' ' + slova : ''));
+    }
+  }
+  return radky.join('\n');
+}
+
+function panelSdileni(v, okamzite, hodiny, cas, celkem, hodnocene, fotky, barvaDne) {
+  if (!sdileni.otevreno) {
+    return '<button type="button" class="tlacitko obrys male-t" style="align-self:flex-start" data-akce="sdiletOtevrit">Sdílet snímek dne…</button>';
+  }
+  const text = textSdileni(v, okamzite, hodiny, cas, celkem, hodnocene);
+  // Obrázek se kreslí znovu jen tehdy, když se změní, co v něm má být.
+  const klic = [v.datum, sdileni.slova, sdileni.okamzite, sdileni.fotky, sdileni.format, barvaDne, text].join('|');
+  if (sdileni.klicObrazku !== klic && !sdileni.pripravuji) {
+    sdileni.pripravuji = true;
+    nakresliSnimekDne({ v, okamzite: sdileni.okamzite ? okamzite : [], hodiny, cas, celkem, hodnocene,
+      fotky: sdileni.fotky ? fotky : [], barvaDne }).then(blob => {
+      if (sdileni.obrazek) URL.revokeObjectURL(sdileni.obrazek.url);
+      sdileni.obrazek = { blob, url: URL.createObjectURL(blob) };
+      sdileni.klicObrazku = klic;
+      sdileni.pripravuji = false;
+      prekresli();
+    });
+  }
+  const nahled = sdileni.obrazek && sdileni.klicObrazku === klic
+    ? '<img class="nahled-snimku" src="' + sdileni.obrazek.url + '" alt="Náhled snímku dne">'
+    : '<p class="tlumene">Připravuji náhled…</p>';
+  return '<section class="karta"><h2>Sdílet snímek dne</h2>' +
+    '<p class="tlumene male">Odejde jen tenhle obrázek s textem – nic jiného. Komu a kudy (zpráva, e-mail, chat) si vybereš sama/sám.</p>'.replace('sama/sám', tvar('sama', 'sám')) +
+    '<label class="panel-nadpis" for="titulek-snimku">Tvůj komentář ke sdílení (nepovinné)</label>' +
+    '<input class="vstup" id="titulek-snimku" data-akce="sdiletTitulek" maxlength="90" value="' + h(sdileni.titulek) +
+      '" placeholder="Třeba: Ani bych ' + tvar('nevěřila', 'nevěřil') + ', co jsem toho dnes ' + tvar('stihla', 'stihl') + '!" autocomplete="off">' +
+    '<span class="panel-nadpis">Tvar obrázku</span><div class="cipy">' +
+      cip('příspěvek', sdileni.format === 'prispevek', 'sdiletFormat', { format: 'prispevek' }) +
+      cip('příběh (na výšku)', sdileni.format === 'pribeh', 'sdiletFormat', { format: 'pribeh' }) + '</div>' +
+    '<label class="prepinac-maly" style="font-size:15px"><input type="checkbox" data-akce="sdiletSlova"' + (sdileni.slova ? ' checked' : '') + '>Přidat moje vlastní slova</label>' +
+    (okamzite.length ? '<label class="prepinac-maly" style="font-size:15px"><input type="checkbox" data-akce="sdiletOkamzite"' + (sdileni.okamzite ? ' checked' : '') + '>Přidat okamžité záznamy</label>' : '') +
+    (fotky.length ? '<label class="prepinac-maly" style="font-size:15px"><input type="checkbox" data-akce="sdiletFotky"' + (sdileni.fotky ? ' checked' : '') + '>Přidat miniatury fotek</label>' : '') +
+    nahled +
+    '<pre class="nahled-sdileni skryte">' + h(text) + '</pre>' +
+    '<p class="tlumene male">Komentář se nepřidá do obrázku – pošle se jako text k němu (na Facebooku třeba jako popisek příběhu).</p>' +
+    '<div class="odkazy"><button type="button" class="tlacitko male-t" data-akce="sdiletTed"' + (nahled.includes('<img') ? '' : ' disabled') + '>Sdílet</button>' +
+    '<button type="button" class="tlacitko obrys male-t" data-akce="sdiletStahnout"' + (nahled.includes('<img') ? '' : ' disabled') + '>Uložit obrázek</button>' +
+    '<button type="button" class="tlacitko obrys male-t" data-akce="sdiletKopirovat">Zkopírovat text</button>' +
+    '<button type="button" class="tlacitko obrys male-t" data-akce="sdiletZavrit">Zavřít</button></div></section>';
+}
+
+// ---------------- SNÍMEK DNE (obrázek ke sdílení) ----------------
+// Kreslíme do „plátna“ (canvas) a z něj uděláme obrázek PNG.
+// Stejné barvy a tvary jako ve shrnutí v aplikaci.
+
+function nactiObrazek(src) {
+  return new Promise((hotovo, chyba) => { const i = new Image(); i.onload = () => hotovo(i); i.onerror = chyba; i.src = src; });
+}
+
+// Rozdělí text do řádků, aby se vešel do dané šířky.
+function zalomText(ctx, text, sirka) {
+  const slova = text.split(' '), radky = [];
+  let radek = '';
+  for (const slovo of slova) {
+    const zkus = radek ? radek + ' ' + slovo : slovo;
+    if (ctx.measureText(zkus).width > sirka && radek) { radky.push(radek); radek = slovo; } else radek = zkus;
+  }
+  if (radek) radky.push(radek);
+  return radky;
+}
+
+function zaoblenyObdelnik(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+async function nakresliSnimekDne(d) {
+  const W = 1080, P = 64, SIRKA = W - 2 * P;
+  const platno = document.createElement('canvas');
+  const ctx = platno.getContext('2d');
+  const serif = '"Fraunces", Georgia, serif', sans = '"Inter", system-ui, sans-serif';
+  try { await document.fonts.ready; } catch (e) { /* písmo není nutné */ }
+
+  // Obsah si nejdřív připravíme jako seznam kroků a spočítáme výšku.
+  ctx.font = '400 34px ' + sans;
+  const datum = new Date(d.v.datum + 'T12:00:00');
+  const nazevDne = new Intl.DateTimeFormat('cs-CZ', { weekday: 'long', day: 'numeric', month: 'long' }).format(datum);
+  const souhrn = [];
+  souhrn.push(d.v.bloky.length + ' ' + (d.v.bloky.length === 1 ? 'blok' : d.v.bloky.length < 5 ? 'bloky' : 'bloků') + (d.celkem ? ', zhruba ' + d.hodiny(d.celkem) : ''));
+  if (d.hodnocene.length) souhrn.push('Příjemný čas ' + d.hodiny(d.cas.prijemny) + ', neutrální ' + d.hodiny(d.cas.neutralni) + ', nepříjemný ' + d.hodiny(d.cas.neprijemny) + '.');
+  const chvile = d.hodnocene.map(b => titulekBloku(b, 'chvíle') + ': ' + (b.prijemnost > 0 ? '+' + b.prijemnost : b.prijemnost) +
+    (sdileni.slova && b.text.trim() ? ' – ' + b.text.trim() : ''));
+  const okamzite = d.okamzite.map(z => {
+    const c = new Date(z.chvile_od).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
+    const p = z.prijemnost == null ? '' : ' ' + (z.prijemnost > 0 ? '+' + z.prijemnost : z.prijemnost);
+    const slova = [z.emoce.map(e => e.slovo).join(', '), sdileni.slova ? z.vlastni_slova : ''].filter(Boolean).join(' – ');
+    return { z, text: c + p + (slova ? ' ' + slova : '') };
+  });
+  const radkySouhrnu = souhrn.flatMap(t => zalomText(ctx, t, SIRKA - 64));
+  const radkyChvil = chvile.flatMap(t => zalomText(ctx, '• ' + t, SIRKA - 64));
+  const radkyOkamzitych = okamzite.flatMap(o => zalomText(ctx, '• ' + o.text, SIRKA));
+  const poradiKat = Object.keys(KATEGORIE);
+  const katB = b => kategorie(b.hodnotit ? b.prijemnost : null);
+  const sBloky = d.v.bloky.filter(b => b.delkaMin)
+    .map((b, i) => ({ b, i })).sort((x, y) => poradiKat.indexOf(katB(x.b)) - poradiKat.indexOf(katB(y.b)) || x.i - y.i).map(x => x.b);
+  // Fotky: všechny na stejnou výšku, šířka podle poměru stran (nic se neořezává).
+  const VYSKA_FOTKY = 240, MEZERA = 16;
+  const fotky = [];
+  for (const z of d.fotky.slice(0, 6)) {
+    try { const img = await nactiObrazek(urlFotky(z.fotka)); fotky.push({ img, w: Math.min(SIRKA, img.width * VYSKA_FOTKY / img.height) }); }
+    catch (e) { /* fotku se nepodařilo načíst */ }
+  }
+  // Rozmístění do řádků
+  let radkuFotek = fotky.length ? 1 : 0, xf = 0;
+  for (const f of fotky) {
+    if (xf > 0 && xf + f.w > SIRKA) { radkuFotek++; xf = 0; }
+    f.radek = radkuFotek - 1; f.x = xf; xf += f.w + MEZERA;
+  }
+
+  ctx.font = '400 34px ' + sans;
+  let H = P + 70 + 16 + 72 + 50 + 30;                        // hlavička: Mám se!, Snímek dne, datum
+  H += 48 + radkySouhrnu.length * 48 + (radkyChvil.length ? 16 + radkyChvil.length * 46 : 0) + 48 + 32; // karta dne
+  if (sBloky.length) H += 50 + 56 + 24 + 60 + 32;           // průběh dne
+  if (okamzite.length) H += 50 + 50 + 50 + radkyOkamzitych.length * 46 + 32;
+  if (fotky.length) H += radkuFotek * (VYSKA_FOTKY + MEZERA) + 32;
+  H += 60 + P;
+  platno.width = W; platno.height = H;
+
+  // Pozadí
+  ctx.fillStyle = '#F7F2EA'; ctx.fillRect(0, 0, W, H);
+  let y = P;
+
+  // Hlavička: logo, název dne
+  try { const logo = await nactiObrazek('ikony/logo.svg'); ctx.drawImage(logo, P, y, 64, 64); } catch (e) { /* bez loga */ }
+  ctx.fillStyle = '#1F2A26'; ctx.font = '600 44px ' + serif; ctx.textBaseline = 'middle';
+  ctx.fillText('Mám se!', P + 84, y + 34);
+  y += 70 + 16;
+  ctx.textBaseline = 'top';
+  ctx.font = '500 62px ' + serif; ctx.fillStyle = '#1F2A26';
+  ctx.fillText('Snímek dne', P, y);
+  y += 72;
+  ctx.font = '400 36px ' + sans; ctx.fillStyle = '#5E6B65';
+  ctx.fillText(nazevDne.charAt(0).toUpperCase() + nazevDne.slice(1), P, y);
+  y += 50 + 30;
+
+  // Karta dne (v barvě dne)
+  const vyskaKarty = 48 + radkySouhrnu.length * 48 + (radkyChvil.length ? 16 + radkyChvil.length * 46 : 0) + 48;
+  zaoblenyObdelnik(ctx, P, y, SIRKA, vyskaKarty, 36);
+  ctx.fillStyle = d.barvaDne || '#FFFDF9'; ctx.fill();
+  if (!d.barvaDne) { ctx.strokeStyle = '#E6DED2'; ctx.lineWidth = 2; ctx.stroke(); }
+  ctx.fillStyle = d.barvaDne ? inkoustPro(d.barvaDne) : '#1F2A26';
+  let yy = y + 48;
+  ctx.font = '400 34px ' + sans;
+  for (const r of radkySouhrnu) { ctx.fillText(r, P + 32, yy); yy += 48; }
+  if (radkyChvil.length) { yy += 16; for (const r of radkyChvil) { ctx.fillText(r, P + 32, yy); yy += 46; } }
+  y += vyskaKarty + 32;
+
+  // Průběh dne
+  if (sBloky.length) {
+    ctx.fillStyle = '#1F2A26'; ctx.font = '500 38px ' + serif; ctx.fillText('Složení dne', P, y); y += 56;
+    const celkem = sBloky.reduce((s, b) => s + b.delkaMin, 0), mezera = 4;
+    let x = P; const sirkaPruhu = SIRKA - mezera * (sBloky.length - 1);
+    const soucty = {};
+    for (const b of sBloky) {
+      const k = kategorie(b.hodnotit ? b.prijemnost : null);
+      soucty[k] = (soucty[k] || 0) + b.delkaMin;
+      const w = Math.max(10, sirkaPruhu * b.delkaMin / celkem);
+      zaoblenyObdelnik(ctx, x, y, w, 56, 8);
+      if (k === 'nepopsana') {
+        ctx.fillStyle = '#EFEAE2'; ctx.fill(); ctx.save(); ctx.clip();
+        ctx.strokeStyle = '#DCD3C6'; ctx.lineWidth = 4;
+        for (let s = -60; s < w + 60; s += 14) { ctx.beginPath(); ctx.moveTo(x + s, y + 56); ctx.lineTo(x + s + 56, y); ctx.stroke(); }
+        ctx.restore();
+      } else { ctx.fillStyle = KATEGORIE[k].barva; ctx.fill(); }
+      x += w + mezera;
+    }
+    y += 56 + 24;
+    // legenda
+    ctx.font = '400 28px ' + sans; let lx = P;
+    for (const k of Object.keys(KATEGORIE).filter(k => soucty[k])) {
+      const popis = KATEGORIE[k].text + ' · ' + d.hodiny(soucty[k]);
+      const sirka = 28 + 12 + ctx.measureText(popis).width + 32;
+      if (lx + sirka > P + SIRKA) { lx = P; y += 40; }
+      zaoblenyObdelnik(ctx, lx, y + 2, 28, 28, 6);
+      ctx.fillStyle = k === 'nepopsana' ? '#DCD3C6' : KATEGORIE[k].barva; ctx.fill();
+      ctx.fillStyle = '#1F2A26'; ctx.fillText(popis, lx + 40, y);
+      lx += sirka;
+    }
+    y += 60 + 32;
+  }
+
+  // Během dne
+  if (okamzite.length) {
+    ctx.fillStyle = '#1F2A26'; ctx.font = '500 38px ' + serif; ctx.fillText('Během dne', P, y); y += 50;
+    const minuty = z => { const t = new Date(z.chvile_od); return t.getHours() * 60 + t.getMinutes(); };
+    const od = Math.min(360, ...okamzite.map(o => minuty(o.z))), doM = 1440;
+    ctx.fillStyle = '#E6DED2'; ctx.fillRect(P, y + 24, SIRKA, 4);
+    for (const o of okamzite) {
+      const x = P + ((minuty(o.z) - od) / (doM - od)) * SIRKA, k = kategorie(o.z.prijemnost);
+      ctx.beginPath(); ctx.arc(x, y + 26, 18, 0, Math.PI * 2);
+      ctx.fillStyle = '#F7F2EA'; ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y + 26, 14, 0, Math.PI * 2);
+      ctx.fillStyle = k === 'nepopsana' ? '#DCD3C6' : KATEGORIE[k].barva; ctx.fill();
+    }
+    y += 50;
+    ctx.font = '400 24px ' + sans; ctx.fillStyle = '#5E6B65';
+    for (let hod = Math.ceil(od / 360) * 6; hod <= 24; hod += 6) {
+      const x = P + ((hod * 60 - od) / (doM - od)) * SIRKA, t = hod + ':00';
+      ctx.fillText(t, Math.min(P + SIRKA - ctx.measureText(t).width, Math.max(P, x - ctx.measureText(t).width / 2)), y);
+    }
+    y += 50;
+    ctx.font = '400 32px ' + sans; ctx.fillStyle = '#1F2A26';
+    for (const r of radkyOkamzitych) { ctx.fillText(r, P, y); y += 46; }
+    y += 32;
+  }
+
+  // Miniatury fotek (doplněk) – celé, jen zmenšené
+  if (fotky.length) {
+    for (const f of fotky) {
+      const fx = P + f.x, fy = y + f.radek * (VYSKA_FOTKY + MEZERA);
+      const fh = f.w < f.img.width * VYSKA_FOTKY / f.img.height ? f.img.height * f.w / f.img.width : VYSKA_FOTKY;
+      ctx.save(); zaoblenyObdelnik(ctx, fx, fy, f.w, fh, 16); ctx.clip();
+      ctx.drawImage(f.img, fx, fy, f.w, fh);
+      ctx.restore();
+    }
+    y += radkuFotek * (VYSKA_FOTKY + MEZERA) + 32;
+  }
+
+  // Patička
+  ctx.font = '400 26px ' + sans; ctx.fillStyle = '#5E6B65';
+  ctx.fillText('Z aplikace Mám se! · Není to hodnocení – jen obrázek dne.', P, H - P - 30);
+
+  // Příběh (Facebook, Instagram, WhatsApp): 1080 × 1920, obsah vystředěný.
+  let vysledek = platno;
+  if (sdileni.format === 'pribeh') {
+    vysledek = document.createElement('canvas');
+    vysledek.width = 1080; vysledek.height = 1920;
+    const c2 = vysledek.getContext('2d');
+    c2.fillStyle = '#F7F2EA'; c2.fillRect(0, 0, 1080, 1920);
+    const meritko = Math.min(1, 1920 / H);
+    const w = W * meritko, v2 = H * meritko;
+    c2.drawImage(platno, (1080 - w) / 2, (1920 - v2) / 2, w, v2);
+  }
+  return new Promise(hotovo => vysledek.toBlob(hotovo, 'image/png'));
+}
+
+// ---------------- GRAFIKA DNE ----------------
+// Barvy podle toho, jaká chvíle byla (stejné jako v Přehledu):
+// příjemná = svěží zelená, ani tak ani tak = béžová, nepříjemná = medová.
+// Nepopsané bloky jsou šrafované. Barva nikdy nenese význam sama –
+// vždy je u ní i legenda a čísla.
+const KATEGORIE = {
+  prijemna:   { text: 'příjemná',          barva: '#72B97F' },
+  neutralni:  { text: 'ani tak, ani tak',  barva: '#D8CFC0' },
+  neprijemna: { text: 'nepříjemná',        barva: '#E6B173' },
+  nepopsana:  { text: 'nepopsaná',         barva: null }
+};
+function kategorie(prijemnost) {
+  if (prijemnost == null) return 'nepopsana';
+  return prijemnost > 0 ? 'prijemna' : prijemnost < 0 ? 'neprijemna' : 'neutralni';
+}
+function stylKategorie(k) {
+  return k === 'nepopsana'
+    ? 'background: repeating-linear-gradient(45deg, #EFEAE2 0 4px, #DCD3C6 4px 6px)'
+    : 'background:' + KATEGORIE[k].barva;
+}
+
+// Průběh dne: bloky za sebou, šířka podle délky.
+function grafBloku(bloky, hodiny) {
+  // Seřazeno jako legenda: příjemná, ani tak ani tak, nepříjemná, nepopsaná
+  // (uvnitř skupiny v pořadí dne).
+  const poradiKat = Object.keys(KATEGORIE);
+  const katBloku = b => kategorie(b.hodnotit ? b.prijemnost : null);
+  const sDelkou = bloky.filter(b => b.delkaMin)
+    .map((b, i) => ({ b, i })).sort((x, y) => poradiKat.indexOf(katBloku(x.b)) - poradiKat.indexOf(katBloku(y.b)) || x.i - y.i).map(x => x.b);
+  if (!sDelkou.length) return '';
+  const celkem = sDelkou.reduce((s, b) => s + b.delkaMin, 0);
+  const soucty = {};
+  let pruh = '';
+  for (const b of sDelkou) {
+    const k = kategorie(b.hodnotit ? b.prijemnost : null);
+    soucty[k] = (soucty[k] || 0) + b.delkaMin;
+    const popisek = titulekBloku(b, 'blok') + ', ' + delkaText(b.delkaMin) + ', ' + KATEGORIE[k].text;
+    pruh += '<span class="segment" style="flex:' + b.delkaMin + ';' + stylKategorie(k) + '" title="' + h(popisek) + '" aria-label="' + h(popisek) + '" role="img"></span>';
+  }
+  const legenda = Object.keys(KATEGORIE).filter(k => soucty[k]).map(k =>
+    '<span class="legenda-polozka"><span class="legenda-znak" style="' + stylKategorie(k) + '"></span>' + KATEGORIE[k].text + ' · ' + hodiny(soucty[k]) + '</span>').join('');
+  return '<section class="karta"><h2>Složení dne</h2>' +
+    '<div class="pruh-dne" aria-label="Bloky dne podle délky, seřazené jako legenda">' + pruh + '</div>' +
+    '<div class="legenda">' + legenda + '</div></section>';
+}
+
+// Okamžité záznamy na ose dne (podle času), pod tím seznam.
+function grafOkamzitych(zaznamy) {
+  if (!zaznamy.length) return '';
+  const minuty = z => { const d = new Date(z.chvile_od); return d.getHours() * 60 + d.getMinutes(); };
+  const od = Math.min(6 * 60, ...zaznamy.map(minuty)), doMin = 24 * 60;
+  let body = '';
+  for (const z of zaznamy) {
+    const k = kategorie(z.prijemnost);
+    const x = ((minuty(z) - od) / (doMin - od)) * 100;
+    const cas = new Date(z.chvile_od).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
+    body += '<a class="bod" href="#/detail/' + encodeURIComponent(z.id) + '" style="left:' + x.toFixed(1) + '%;' + stylKategorie(k) +
+      '" aria-label="' + cas + ', ' + KATEGORIE[k].text + '"></a>';
+  }
+  let popisky = '';
+  for (let hod = Math.ceil(od / 360) * 6; hod <= 24; hod += 6) {
+    popisky += '<span style="left:' + (((hod * 60 - od) / (doMin - od)) * 100).toFixed(1) + '%">' + hod + ':00</span>';
+  }
+  const seznam = zaznamy.map(z => {
+    const p = z.prijemnost;
+    const popis = shrnutiZaznamu(z);
+    return '<a class="zaznam-radek" href="#/detail/' + encodeURIComponent(z.id) + '"><span class="znamka' +
+      (p == null ? '' : p > 0 ? ' prijemna' : p < 0 ? ' neprijemna' : '') + '">' + (p == null ? '–' : p > 0 ? '+' + p : p) + '</span>' +
+      '<div><div class="tlumene male">' + new Date(z.chvile_od).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' }) + '</div>' +
+      '<div>' + h(popis.slice(0, 80)) + '</div></div>' +
+      (z.fotka ? '<img class="miniatura" src="' + urlFotky(z.fotka) + '" alt="">' : '<span class="sipka" aria-hidden="true">›</span>') + '</a>';
+  }).join('');
+  return '<section class="karta"><h2>Během dne</h2>' +
+    '<div class="osa-dne" aria-label="Okamžité záznamy podle času"><span class="osa-cara"></span>' + body + '</div>' +
+    '<div class="osa-popisky tlumene male">' + popisky + '</div>' +
+    '<div class="seznam">' + seznam + '</div></section>';
+}
+
+function nahledyFotek(zaznamy) {
+  if (!zaznamy.length) return '';
+  return '<section class="karta"><h2>Fotky dne</h2><div class="fotky-mrizka">' +
+    zaznamy.map(z => '<a href="#/detail/' + encodeURIComponent(z.id) + '"><img src="' + urlFotky(z.fotka) + '" alt="Fotka u záznamu"></a>').join('') +
+    '</div></section>';
 }
 
 // ---------------- DETAIL ZÁZNAMU ----------------
@@ -1040,6 +1500,7 @@ async function obrazovkaDetail(id) {
       '<section class="karta">' +
         radek('Jaká byla chvíle', prijemnost) +
         (z.fotka ? '<img class="fotka-velka" src="' + urlFotky(z.fotka) + '" alt="Fotka u záznamu">' : '') +
+        radek('Kus dne', z.popis_bloku ? h(z.popis_bloku) : '') +
         radek('Vlastními slovy', z.vlastni_slova ? h(z.vlastni_slova).replace(/\n/g, '<br>') : '') +
         radek('Emoce', emoce) +
         radek('V těle', telo) +
@@ -1198,7 +1659,7 @@ function obrazovkaPomoc() {
   }
   if (!blizci) {
     blizci = '<p class="tlumene male">Můžeš poslat třeba tuhle zprávu: „' + h(zprava) + '“. ' +
-      'Až 3 blízké lidi si můžeš uložit v <a href="#/nastaveni">Nastavení</a>, pak je tu najdeš připravené.</p>';
+      'Až 3 blízké lidi, kterým věříš, si můžeš uložit v <a href="#/nastaveni">Nastavení</a>, pak je tu najdeš připravené.</p>';
   }
 
   const krok = (cislo, nadpis, obsah) =>
@@ -1320,7 +1781,7 @@ async function obrazovkaNastaveni() {
     '<main class="obsah">' +
       '<section class="karta"><h2>Oslovení</h2><p class="tlumene male">Jaký tvar sloves preferuješ?</p>' +
         volba('oba', '„byla/byl“ – oba tvary') + volba('zensky', '„byla“') + volba('muzsky', '„byl“') + '</section>' +
-      '<section class="karta"><h2>Blízcí lidé pro případ nouze</h2><p class="tlumene male">Ukážou se na obrazovce Pomoc s připravenou zprávou. Zůstávají jen v tomto telefonu.</p>' +
+      '<section class="karta"><h2>Blízcí lidé, kterým věřím</h2><p class="tlumene male">Ti, se kterými chceš sdílet svá osobní pozorování nebo se na ně obrátit v případě nouze.</p>' +
         kontakty + pridatKontakt + '</section>' +
       '<section class="karta"><h2>Připomínka večerního ohlédnutí</h2>' +
         '<p class="tlumene male">Aplikace sama připomínat neumí, proto si připomínku dáš do kalendáře. Odkaz v ní otevře rovnou večerní ohlédnutí.</p>' +
@@ -1363,14 +1824,18 @@ const AKCE = {
   blokUpravit(d) {
     const i = +d.index;
     vecer.upravovany = i;
-    vecer.rozpracovany = Object.assign({}, vecer.bloky[i], { sKym: [...vecer.bloky[i].sKym] });
+    vecer.rozpracovany = Object.assign({}, vecer.bloky[i], { sKym: [...vecer.bloky[i].sKym], cinnost: [...vecer.bloky[i].cinnost] });
     prekresli();
   },
-  blokCinnost(d) { const b = vecer.rozpracovany; b.cinnost = b.cinnost === d.slovo ? null : d.slovo; prekresli(); },
+  blokCinnost(d) {
+    const b = vecer.rozpracovany;
+    b.cinnost = b.cinnost.includes(d.slovo) ? b.cinnost.filter(c => c !== d.slovo) : [...b.cinnost, d.slovo];
+    prekresli();
+  },
   blokVlastniOtevrit() { vecer.vlastniCinnost = true; prekresli(); document.getElementById('vlastni-cinnost')?.focus(); },
   blokVlastniPridat() {
     const t = document.getElementById('vlastni-cinnost').value.trim().toLowerCase();
-    if (t) vecer.rozpracovany.cinnost = t;
+    if (t && !vecer.rozpracovany.cinnost.includes(t)) vecer.rozpracovany.cinnost.push(t);
     vecer.vlastniCinnost = false;
     prekresli();
   },
@@ -1383,10 +1848,19 @@ const AKCE = {
   blokKde(d) { const b = vecer.rozpracovany; b.kde = b.kde === d.slovo ? null : d.slovo; prekresli(); },
   blokHotovo() {
     const b = vecer.rozpracovany;
-    if (!b.cinnost) { oznam('Vyber, co jsi ' + tvar('dělala', 'dělal') + ' – stačí jedno slovo.'); return; }
+    if (!b.cinnost.length) { oznam('Vyber, co jsi ' + tvar('dělala', 'dělal') + ' – stačí jedno slovo.'); return; }
     if (vecer.upravovany === 'novy') vecer.bloky.push(b);
     else vecer.bloky[vecer.upravovany] = b;
     vecer.upravovany = null; vecer.rozpracovany = null; vecer.vlastniCinnost = false;
+    prekresli();
+  },
+  // Posun upravovaného bloku o jedno místo (náhrada za přetažení).
+  blokPosun(d) {
+    const i = vecer.upravovany, j = i + parseInt(d.smer, 10);
+    if (j < 0 || j >= vecer.bloky.length) return;
+    vecer.bloky[i] = vecer.rozpracovany;
+    [vecer.bloky[i], vecer.bloky[j]] = [vecer.bloky[j], vecer.bloky[i]];
+    vecer.upravovany = j;
     prekresli();
   },
   blokZrusit() { vecer.upravovany = null; vecer.rozpracovany = null; vecer.vlastniCinnost = false; prekresli(); },
@@ -1394,6 +1868,64 @@ const AKCE = {
     const [odebrany] = vecer.bloky.splice(vecer.upravovany, 1);
     if (odebrany.ulozeny) (vecer.smazane = vecer.smazane || []).push(odebrany.id);
     vecer.upravovany = null; vecer.rozpracovany = null;
+    prekresli();
+  },
+  sdiletOtevrit() { sdileni.otevreno = true; prekresli(); },
+  sdiletZavrit() {
+    if (sdileni.obrazek) URL.revokeObjectURL(sdileni.obrazek.url);
+    sdileni = { otevreno: false, slova: false, okamzite: false, fotky: true, titulek: '', format: 'prispevek', obrazek: null, klicObrazku: null, pripravuji: false };
+    prekresli();
+  },
+  sdiletSlova(d, el) { sdileni.slova = el.checked; prekresli(); },
+  sdiletOkamzite(d, el) { sdileni.okamzite = el.checked; prekresli(); },
+  sdiletFotky(d, el) { sdileni.fotky = el.checked; prekresli(); },
+  sdiletTitulek(d, el) { sdileni.titulek = el.value; prekresli(); },
+  sdiletFormat(d) { sdileni.format = d.format; prekresli(); },
+  async sdiletTed() {
+    // K obrázku jde jako text komentář; když žádný není, krátké textové shrnutí.
+    const text = sdileni.titulek.trim() || app.querySelector('.nahled-sdileni').textContent;
+    const soubor = new File([sdileni.obrazek.blob], 'snimek-dne.png', { type: 'image/png' });
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [soubor] })) {
+        await navigator.share({ files: [soubor], title: 'Snímek dne', text });
+      } else if (navigator.share) {
+        await navigator.share({ title: 'Snímek dne', text });
+      } else {
+        await AKCE.sdiletStahnout();
+      }
+    } catch (e) { /* zrušeno – nic se neděje */ }
+  },
+  sdiletStahnout() {
+    const odkaz = document.createElement('a');
+    odkaz.href = sdileni.obrazek.url;
+    odkaz.download = 'mam-se-snimek-dne-' + (vecer ? vecer.datum : U.datumDne()) + '.png';
+    document.body.appendChild(odkaz); odkaz.click(); odkaz.remove();
+  },
+  async sdiletKopirovat() {  // jen text
+    const text = app.querySelector('.nahled-sdileni').textContent;
+    try { await navigator.clipboard.writeText(text); oznam('Zkopírováno. Můžeš to vložit do zprávy.'); }
+    catch (e) { oznam('Kopírování nejde – text můžeš označit a zkopírovat ručně.'); }
+  },
+  vecerNovy() { vecer.krok = 'bloky'; vecer.upravovany = 'novy'; vecer.rozpracovany = novyBlok(); prekresli(); },
+  async vecerNacist() {
+    const z = (await U.vsechnyZaznamy())
+      .filter(x => x.typ === 'vecerni' && x.poradi != null && x.chvile_od.slice(0, 10) === vecer.predchoziDen)
+      .sort((a, b) => a.poradi - b.poradi);
+    // Přebíráme jen rozvrh (co, jak dlouho, s kým, kde) – ne pocity ani hodnocení.
+    vecer.bloky = z.map(x => Object.assign(novyBlok(), {
+      popis: x.popis_bloku || '', cinnost: [...(x.cinnost || [])], delkaMin: x.chvile_delka_min, sKym: [...(x.s_kym || [])], kde: x.kde
+    }));
+    vecer.krok = 'bloky';
+    prekresli();
+  },
+  vecerOdlozit() {
+    // Rozepsané zůstane v paměti, dokud aplikaci nezavřeš. Jistota je „Uložit“.
+    location.hash = '#/domov';
+  },
+  async vecerUlozitRozvrh() {
+    if (vecer.upravovany !== null) { oznam('Nejdřív dokonči rozepsaný blok.'); return; }
+    await ulozVecer(false);
+    oznam('Rozvrh je uložený. Můžeš kdykoli pokračovat.');
     prekresli();
   },
   vecerDal() {
@@ -1588,7 +2120,7 @@ const AKCE = {
         }
       }
       const pole = document.getElementById(idPoleCile(cil));
-      if (pole) pole.value = hodnotaCile(cil);
+      if (pole) { pole.value = hodnotaCile(cil); rozvinPole(pole); }
       if (cil === 'text') vykresliPoznana();
     };
     const tentoBeh = diktovani;
@@ -1768,6 +2300,7 @@ async function vykresli() {
     if (d) d.open = true;
   }
   if (t === 'zaznam') vykresliPoznana();
+  rozvinVsechnaPole();
   // Při změně obrazovky nahoru, při překreslení stejné obrazovky zůstat na místě.
   window.scrollTo(0, stejnaObrazovka ? posun : 0);
   posledniTrasa = t;
@@ -1775,8 +2308,17 @@ async function vykresli() {
 
 function prekresli() { vykresli(); }
 
+// Pole pro psaní roste s textem, aby šlo pohodlně číst a opravovat,
+// co diktování zaslechlo.
+function rozvinPole(el) {
+  el.style.height = 'auto';
+  el.style.height = (el.scrollHeight + 2) + 'px';
+}
+function rozvinVsechnaPole() { app.querySelectorAll('textarea').forEach(rozvinPole); }
+
 // Jedno místo pro všechna klepnutí.
 app.addEventListener('click', (ev) => {
+  if (potlacitKlik) { ev.preventDefault(); return; } // klik po přetažení bloku ignorujeme
   const el = ev.target.closest('[data-akce]');
   if (!el || el.tagName === 'INPUT') return; // přepínače řeší událost „change“
   const akce = AKCE[el.dataset.akce];
@@ -1815,6 +2357,47 @@ app.addEventListener('contextmenu', (ev) => {
   if (!poPodrzeni) otevriUpravu(el);
 });
 
+// ---- Přetahování bloků dne (podržet a táhnout) ----
+let kandidatTazeni = null, tazeni = null, potlacitKlik = false;
+app.addEventListener('pointerdown', (ev) => {
+  const el = ev.target.closest('[data-blok-index]');
+  if (!el || !vecer) return;
+  kandidatTazeni = { el, i: +el.dataset.blokIndex, y0: ev.clientY };
+  kandidatTazeni.casovac = setTimeout(() => {
+    tazeni = kandidatTazeni;
+    tazeni.el.classList.add('zvednuty');
+    if (navigator.vibrate) navigator.vibrate(15);
+  }, 450);
+});
+app.addEventListener('pointermove', (ev) => {
+  if (kandidatTazeni && !tazeni && Math.abs(ev.clientY - kandidatTazeni.y0) > 8) {
+    clearTimeout(kandidatTazeni.casovac); kandidatTazeni = null; // člověk jen posouvá stránku
+  }
+  if (!tazeni) return;
+  tazeni.el.style.transform = 'translateY(' + (ev.clientY - tazeni.y0) + 'px)';
+  tazeni.y = ev.clientY;
+});
+// Během přetahování se stránka nesmí posouvat.
+app.addEventListener('touchmove', (ev) => { if (tazeni) ev.preventDefault(); }, { passive: false });
+function konecTazeni() {
+  if (kandidatTazeni) clearTimeout(kandidatTazeni.casovac);
+  kandidatTazeni = null;
+  if (!tazeni) return;
+  const t = tazeni; tazeni = null;
+  potlacitKlik = true; setTimeout(() => { potlacitKlik = false; }, 300);
+  if (t.y == null) { t.el.classList.remove('zvednuty'); t.el.style.transform = ''; return; }
+  // Nové místo: kolik ostatních bloků má střed nad prstem.
+  const radky = [...document.querySelectorAll('[data-blok-index]')].filter(r => r !== t.el);
+  let nove = 0;
+  for (const r of radky) { const b = r.getBoundingClientRect(); if (b.top + b.height / 2 < t.y) nove++; }
+  const [blok] = vecer.bloky.splice(t.i, 1);
+  vecer.bloky.splice(nove, 0, blok);
+  prekresli();
+}
+app.addEventListener('pointerup', konecTazeni);
+app.addEventListener('pointercancel', konecTazeni);
+app.addEventListener('contextmenu', (ev) => { if (ev.target.closest('[data-blok-index]')) ev.preventDefault(); });
+
 // Zaškrtávátka, přepínače a výběr souboru.
 app.addEventListener('change', (ev) => {
   const el = ev.target;
@@ -1827,7 +2410,9 @@ app.addEventListener('change', (ev) => {
 // (jinak by klávesnice zmizela uprostřed slova).
 app.addEventListener('input', (ev) => {
   const el = ev.target;
+  if (el.tagName === 'TEXTAREA') rozvinPole(el);
   if (el.dataset.blokText != null && vecer) { vecer.bloky[+el.dataset.blokText].text = el.value; return; }
+  if (el.dataset.blokPopis && vecer && vecer.rozpracovany) { vecer.rozpracovany.popis = el.value; return; }
   if (!koncept) return;
   if (el.id === 'text') {
     koncept.text = el.value;

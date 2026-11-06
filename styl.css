@@ -137,7 +137,7 @@ button { font: inherit; color: inherit; }
 }
 .pole:focus-within { border-color: var(--lahvova); }
 .pole textarea, .pole input {
-  border: none; outline: none; resize: vertical; background: transparent; width: 100%;
+  border: none; outline: none; resize: none; overflow: hidden; min-height: 3em; background: transparent; width: 100%;
   font-family: var(--text); font-size: 16px; line-height: 1.5; color: var(--inkoust);
 }
 .pole textarea::placeholder, .pole input::placeholder { color: #6B756F; }
@@ -246,3 +246,37 @@ a.den .kolecko { border: 1.5px solid transparent; }
 .vzorek { aspect-ratio: 1; border-radius: 50%; border: 1px solid rgba(31,42,38,.15); cursor: pointer; font-size: 18px; font-weight: 600; }
 .vzorek[aria-pressed="true"] { outline: 3px solid var(--inkoust); outline-offset: 2px; }
 .vzorek-maly { display: inline-block; width: 18px; height: 18px; border-radius: 9px; vertical-align: middle; border: 1px solid rgba(31,42,38,.2); }
+
+.spodni-lista.tri { grid-template-columns: 1fr 1fr 1fr; }
+button.karta { width: 100%; color: var(--inkoust); }
+
+/* ---------- Grafika dne ---------- */
+.pruh-dne { display: flex; gap: 2px; height: 28px; }
+.pruh-dne .segment { min-width: 6px; border-radius: 4px; }
+.pruh-popis { display: flex; justify-content: space-between; }
+.legenda { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--inkoust); }
+.legenda-polozka { display: inline-flex; align-items: center; gap: 6px; }
+.legenda-znak { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
+.osa-dne { position: relative; height: 28px; margin: 4px 8px 0 8px; }
+.osa-cara { position: absolute; left: 0; right: 0; top: 13px; height: 2px; background: var(--linka); }
+.osa-dne .bod { position: absolute; top: 4px; width: 20px; height: 20px; margin-left: -10px; border-radius: 10px; box-shadow: 0 0 0 2px var(--plocha); border: 1px solid rgba(31,42,38,.25); }
+.osa-popisky { position: relative; height: 16px; margin: 0 8px; }
+.osa-popisky span { position: absolute; transform: translateX(-50%); }
+.miniatura { height: 44px; width: auto; max-width: 88px; border-radius: 8px; align-self: center; }
+.fotky-mrizka { display: flex; flex-wrap: wrap; gap: 6px; }
+.fotky-mrizka img { height: 110px; width: auto; max-width: 100%; border-radius: 10px; display: block; }
+
+.nahled-sdileni { white-space: pre-wrap; font-family: var(--text); font-size: 14px; margin: 0; padding: 12px; border-radius: 12px; background: var(--kremova); border: 1px solid var(--linka); }
+
+.balicek { margin: 2px 0 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
+
+.nahled-snimku { width: 100%; border-radius: 12px; border: 1px solid var(--linka); }
+
+/* Oddíly otázek – výrazná čára a nadpis, ať je vidět, kde která nabídka začíná */
+.oddil { display: flex; flex-direction: column; gap: 10px; padding-top: 16px; margin-top: 6px; border-top: 2px solid var(--linka); }
+.oddil-nadpis { font-family: var(--nadpisy); font-size: 19px; font-weight: 500; color: var(--inkoust); margin: 0; }
+.oddil-pozn { display: block; font-family: var(--text); font-size: 13px; color: var(--druhotny); margin-top: 2px; }
+
+/* Přetahování bloků dne */
+.blok-radek { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.blok-radek.zvednuty { position: relative; z-index: 5; box-shadow: 0 8px 24px rgba(31,42,38,.18); border-color: var(--lahvova); transition: box-shadow .15s; }
