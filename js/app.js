@@ -12,6 +12,7 @@
 
 import * as S from './slovniky.js';
 import * as U from './uloziste.js';
+import { spustOslavu, ANIMACE_PODLE_SKUPINY } from './oslava.js';
 
 const app = document.getElementById('app');
 
@@ -85,6 +86,7 @@ const IKONA = {
   tuzka: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1-4L16 5l3 3L8 19l-4 1zM14 7l3 3"/></svg>',
   mikrofon: '<svg class="mikrofon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
   fotak: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+  hvezda: '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z"/></svg>',
   mesic: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M19 15a8 8 0 0 1-10-10 8 8 0 1 0 10 10z"/></svg>',
   galerie: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="M5 18l5-5 3 3 2-2 4 4"/></svg>',
   domov: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/></svg>',
@@ -283,6 +285,10 @@ function navigace(aktivni) {
 // když opravdu není co ukázat.
 function shrnutiZaznamu(z) {
   const casti = [];
+  if (z.typ === 'oslava') {
+    return ['oslava: ' + (z.vlastni_slova || z.potreby.map(p => p.potreba).join(', ') || 'beze slov'),
+      z.podekovani ? 'díky: ' + z.podekovani : ''].filter(Boolean).join(' · ');
+  }
   const blok = z.typ === 'vecerni' && z.poradi != null;
   if (blok) casti.push(z.popis_bloku || (z.cinnost || []).join(' + '));
   if (z.emoce.length) casti.push(z.emoce.map(e => e.slovo + (e.intenzita != null ? ' ' + e.intenzita : '')).join(', '));
@@ -325,7 +331,8 @@ function znamkaPrijemnosti(p) {
 function radekSeznamu(polozka) {
   if (polozka.druh === 'zaznam') {
     const z = polozka.z;
-    return '<a class="zaznam-radek" href="#/detail/' + encodeURIComponent(z.id) + '">' + znamkaPrijemnosti(z.prijemnost) +
+    return '<a class="zaznam-radek" href="#/detail/' + encodeURIComponent(z.id) + '">' +
+      (z.typ === 'oslava' ? '<span class="znamka oslava" aria-label="Oslava">' + IKONA.hvezda + '</span>' : znamkaPrijemnosti(z.prijemnost)) +
       '<div><div class="tlumene male">' + popisCasu(z) + '</div><div>' + h(shrnutiZaznamu(z)) + '</div></div>' +
       (z.fotka ? '<img class="miniatura" src="' + urlFotky(z.fotka) + '" alt="">' : '<span class="sipka" aria-hidden="true">›</span>') + '</a>';
   }
@@ -372,7 +379,7 @@ async function obrazovkaDomov() {
     const popisek = zkratky[i] + ' ' + den.getDate() + '. ' + (den.getMonth() + 1) + '.: ' + pocet + ' záznamů' + (barva ? ', barva dne' : '');
     tyden += budouci
       ? '<div class="den"><span class="kolecko" aria-label="' + popisek + '"></span>' + zkratky[i] + '</div>'
-      : '<a class="den' + (jeDnes ? ' dnes' : '') + '" href="#/den/' + datum + '"><span class="kolecko"' + styl +
+      : '<a class="den' + (jeDnes ? ' dnes' : '') + '" href="' + (den_ && den_.vecerni_hotovo ? '#/vecer/' : '#/den/') + datum + '"><span class="kolecko"' + styl +
         ' aria-label="' + popisek + '">' + (pocet || '') + '</span>' + zkratky[i] + '</a>';
   }
 
@@ -396,7 +403,7 @@ async function obrazovkaDomov() {
       '<p class="tlumene">' + (dnesVecer ? 'Dnešní ohlédnutí je hotové. Můžeš ho kdykoli doplnit.' : 'Jaký byl Tvůj den?') + '</p>' +
       '<a class="tlacitko jemne" style="align-self:flex-start" href="#/vecer">' + (dnesVecer ? 'Upravit ohlédnutí' : 'Začít ohlédnutí') + '</a></section>' +
     '<section class="karta"><div class="karta-radek"><h2>Tento týden</h2></div><div class="tyden">' + tyden + '</div>' +
-      '<p class="tlumene male">Číslo v kolečku je počet záznamů. Klepnutím na den ' + (nastaveni.barva_dne_zapnuta ? 'zvolíš jeho barvu a uvidíš jeho záznamy.' : 'uvidíš jeho záznamy.') + '</p></section>' +
+      '<p class="tlumene male">Číslo v kolečku je počet záznamů. Klepnutím na den otevřeš jeho ohlédnutí' + (nastaveni.barva_dne_zapnuta ? ', u dne bez ohlédnutí zvolíš barvu.' : '.') + '</p></section>' +
     (seznam ? '<section class="seznam" aria-label="Poslední záznamy"><h2>Poslední záznamy</h2>' + seznam + '</section>' : '') +
     '</main>' + navigace('domov');
 }
@@ -600,7 +607,7 @@ function obrazovkaZaznamDal() {
           '<p class="tlumene male">Návrhy podle Max-Neefa. Sklenička ukazuje, kolik té potřeby teď máš: 0 prázdná, 4 plná. Skřípnutá potřeba dostane prasklinu – i plná sklenička může prasknout.</p>' +
           '<div class="cipy">' + skupiny + '</div>' + vlastniPotreba + potrebyPanel +
           (sklenicky ? '<div class="vybrane">' + sklenicky + '</div><p class="tlumene male">Dlouhým podržením názvu potřebu změníš nebo odstraníš.</p>' : '')],
-        ['kolem', k.cinnost.length || k.sKym.length || k.kde, 'Co se děje kolem?',
+        ['kolem', k.cinnost.length || k.sKym.length || k.kde, 'Co se teď děje?',
           '<div class="oddil"><h3 class="oddil-nadpis">Co právě děláš?</h3><div class="cipy">' + cinnosti + '</div></div>' +
           '<div class="oddil"><h3 class="oddil-nadpis">S kým?</h3><div class="cipy">' + skym + '</div></div>' +
           '<div class="oddil"><h3 class="oddil-nadpis">Kde?</h3><div class="cipy">' + kde + '</div></div>'],
@@ -634,17 +641,23 @@ function tlacitkoDiktovani(cil) {
 
 // Cíl „blok:3“ = vlastní slova ke třetímu bloku večerního ohlédnutí.
 function hodnotaCile(cil) {
+  if (cil === 'oslavaText') return oslava.text;
+  if (cil === 'oslavaDik') return oslava.podekovani;
   if (cil === 'blokpopis') return vecer.rozpracovany.popis;
   if (cil.startsWith('blok:')) return vecer.bloky[+cil.slice(5)].text;
   return koncept[cil];
 }
 function nastavCil(cil, text) {
-  if (cil === 'blokpopis') vecer.rozpracovany.popis = text;
+  if (cil === 'oslavaText') oslava.text = text;
+  else if (cil === 'oslavaDik') oslava.podekovani = text;
+  else if (cil === 'blokpopis') vecer.rozpracovany.popis = text;
   else if (cil.startsWith('blok:')) vecer.bloky[+cil.slice(5)].text = text;
   else koncept[cil] = text;
 }
 function idPoleCile(cil) {
   if (cil === 'blokpopis') return 'blok-popis';
+  if (cil === 'oslavaText') return 'oslava-text';
+  if (cil === 'oslavaDik') return 'oslava-dik';
   return cil.startsWith('blok:') ? 'blok-text-' + cil.slice(5) : ID_POLE[cil];
 }
 
@@ -759,7 +772,7 @@ async function obrazovkaDen(datum) {
 
   let barvy = '';
   if (nastaveni.barva_dne_zapnuta) {
-    barvy = '<section class="karta"><h2>Jakou barvu měl Tvůj den?</h2>' +
+    barvy = '<section class="karta"><h2>Jakou barvu ' + (datum === U.datumDne() ? 'má' : 'měl') + ' Tvůj den?</h2>' +
       paletaBarev(datum, den.barva) +
       '<div class="odkazy"><label class="tlacitko obrys male-t" style="cursor:pointer">Jiná barva…' +
         '<input type="color" class="skryte" data-akce="barvaVlastni" data-datum="' + datum + '" value="' + (den.barva || '#72B97F') + '"></label>' +
@@ -837,9 +850,14 @@ async function pripravVecer(datum) {
     const drivejsi = (await U.vsechnyZaznamy())
       .filter(z => z.typ === 'vecerni' && z.poradi != null && z.chvile_od.slice(0, 10) < datum)
       .map(z => z.chvile_od.slice(0, 10)).sort();
-    vecer.predchoziDen = drivejsi.length ? drivejsi[drivejsi.length - 1] : null;
-    if (vecer.predchoziDen) vecer.krok = 'start';
-    else { vecer.upravovany = 'novy'; vecer.rozpracovany = novyBlok(); }
+    const dny = [...new Set(drivejsi)];
+    vecer.predchoziDen = dny.length ? dny[dny.length - 1] : null;
+    // Poslední stejný den v týdnu (např. minulý pátek), pokud je jiný než předchozí den.
+    const denTydne = new Date(datum + 'T12:00:00').getDay();
+    const stejne = dny.filter(x => new Date(x + 'T12:00:00').getDay() === denTydne);
+    vecer.stejnyDen = stejne.length && stejne[stejne.length - 1] !== vecer.predchoziDen ? stejne[stejne.length - 1] : null;
+    // Rovnou se tvoří nový blok; načtení předchozího rozvrhu se nabídne nad ním.
+    vecer.upravovany = 'novy'; vecer.rozpracovany = novyBlok();
   }
 }
 
@@ -918,8 +936,8 @@ function editorBloku(b) {
   const oddil = (nadpis, obsah, pro) => '<div class="oddil">' +
     (pro ? '<label class="oddil-nadpis" for="' + pro + '">' : '<h3 class="oddil-nadpis">') + nadpis + (pro ? '</label>' : '</h3>') + obsah + '</div>';
   return '<section class="karta">' +
-    '<h2>' + (vecer.upravovany === 'novy' ? 'Další blok dne' : 'Upravit blok') + '</h2>' +
-    oddil('Co jsi ' + tvar('dělala', 'dělal') + '? <span class="oddil-pozn">Můžeš vybrat i víc věcí, které běžely zároveň.</span>',
+    '<h2>' + (vecer.upravovany === 'novy' ? (vecer.bloky.length ? 'Další blok dne' : 'První blok dne') : 'Upravit blok') + '</h2>' +
+    oddil('Co jsi ' + tvar('dělala', 'dělal') + '? <span class="oddil-pozn">Můžeš vybrat i dvě činnosti, pokud probíhaly společně. Např. vaření a podcast.</span>',
       '<div class="cipy">' + cinnosti + '</div>' + vlastni) +
     oddil('Vlastními slovy <span class="oddil-pozn">nepovinné – ať víš, který kus dne to byl</span>',
       '<div class="pole"><textarea id="blok-popis" rows="2" data-blok-popis="1" placeholder="Třeba: dopolední porada, psaní zprávy…">' + h(b.popis) + '</textarea>' +
@@ -971,6 +989,25 @@ async function obrazovkaVecer(parametr) {
 
   // ---- 1. bloky ----
   if (v.krok === 'bloky') {
+    // Nabídka načíst rozvrh – jen když je den zatím prázdný.
+    const kratce = x => { const d = new Date(x + 'T12:00:00'); return d.getDate() + '. ' + (d.getMonth() + 1) + '.'; };
+    const MINULY = ['minulou neděli', 'minulé pondělí', 'minulé úterý', 'minulou středu', 'minulý čtvrtek', 'minulý pátek', 'minulou sobotu'];
+    const NAZEV = ['neděli', 'pondělí', 'úterý', 'středu', 'čtvrtek', 'pátek', 'sobotu'];
+    let nacist = '';
+    if (!v.bloky.length && (v.predchoziDen || v.stejnyDen)) {
+      const tlac = (datumZdroje, text) => '<button type="button" class="tlacitko obrys" style="justify-content:flex-start" data-akce="vecerNacist" data-zdroj="' + datumZdroje + '">' + text + '</button>';
+      let stejny = '';
+      if (v.stejnyDen) {
+        const dny = Math.round((new Date(v.datum + 'T12:00:00') - new Date(v.stejnyDen + 'T12:00:00')) / 86400000);
+        const wd = new Date(v.stejnyDen + 'T12:00:00').getDay();
+        stejny = tlac(v.stejnyDen, 'Načíst ' + (dny === 7 ? MINULY[wd] : NAZEV[wd]) + ' (' + kratce(v.stejnyDen) + ')');
+      }
+      nacist = '<section class="karta"><h2>Načíst rozvrh?</h2>' +
+        '<p class="tlumene male">Bloky si pak upravíš. Hodnocení chvil se nepřebírá. Nebo rovnou začni tvořit níž.</p>' +
+        '<div style="display:flex;flex-direction:column;gap:8px">' +
+          (v.predchoziDen ? tlac(v.predchoziDen, 'Načíst předchozí den (' + kratce(v.predchoziDen) + ')') : '') + stejny +
+        '</div></section>';
+    }
     let seznam = '';
     v.bloky.forEach((b, i) => {
       if (v.upravovany === i) { seznam += editorBloku(v.rozpracovany); return; }
@@ -985,6 +1022,7 @@ async function obrazovkaVecer(parametr) {
       '<main class="obsah">' +
         '<div><h1 style="font-size:26px">Co jsi ' + (v.datum === U.datumDne() ? 'dnes' : 'ten den') + ' ' + tvar('dělala', 'dělal') + '?</h1>' +
         '<p class="tlumene">Rozlož si den do bloků, jak šly po sobě. Stačí zhruba – noční spánek se nezapisuje.</p></div>' +
+        nacist +
         (seznam ? '<div class="seznam" id="seznam-bloku">' + seznam + '</div>' +
           (v.bloky.length > 1 && v.upravovany === null ? '<p class="tlumene male">Pořadí změníš, když blok podržíš a přetáhneš nahoru nebo dolů.</p>' : '') : '') + novy + pridat +
       '</main>' +
@@ -1054,7 +1092,7 @@ async function obrazovkaVecer(parametr) {
   if (v.krok === 'barva') {
     const den = (await U.nactiDen(v.datum)) || {};
     return hlavickaVecera(nazevDneVecera(), '#/vecer/' + v.datum) +
-      '<main class="obsah"><section class="karta"><h1 style="font-size:26px">Jakou barvu měl Tvůj den?</h1>' +
+      '<main class="obsah"><section class="karta"><h1 style="font-size:26px">Jakou barvu ' + (v.datum === U.datumDne() ? 'má' : 'měl') + ' Tvůj den?</h1>' +
         paletaBarev(v.datum, den.barva) +
         '<div class="odkazy"><label class="tlacitko obrys male-t" style="cursor:pointer">Jiná barva…' +
           '<input type="color" class="skryte" data-akce="barvaVlastni" data-datum="' + v.datum + '" value="' + (den.barva || '#72B97F') + '"></label>' +
@@ -1082,7 +1120,8 @@ async function obrazovkaVecer(parametr) {
 
   // Všechny záznamy toho dne – okamžité i večerní (kvůli fotkám a průběhu dne)
   const zaznamyDne = (await U.vsechnyZaznamy()).filter(z => z.chvile_od.slice(0, 10) === v.datum);
-  const okamzite = zaznamyDne.filter(z => z.typ !== 'vecerni').sort((a, b) => a.chvile_od.localeCompare(b.chvile_od));
+  const okamzite = zaznamyDne.filter(z => z.typ !== 'vecerni' && z.typ !== 'oslava').sort((a, b) => a.chvile_od.localeCompare(b.chvile_od));
+  const oslavyDne = zaznamyDne.filter(z => z.typ === 'oslava').sort((a, b) => a.chvile_od.localeCompare(b.chvile_od));
   const sFotkou = [...okamzite, ...zaznamyDne.filter(z => z.typ === 'vecerni')].filter(z => z.fotka);
 
   // Co ještě jde doplnit
@@ -1105,13 +1144,18 @@ async function obrazovkaVecer(parametr) {
       grafBloku(v.bloky, hodiny) +
       grafOkamzitych(okamzite) +
       nahledyFotek(sFotkou) +
-      '<p class="tlumene male">Uloženo jen v tomto telefonu. Není to hodnocení – jen obrázek dne.</p>' +
-      panelSdileni(v, okamzite, hodiny, cas, celkem, hodnocene, sFotkou, nastaveni.barva_dne_zapnuta ? den.barva : null) +
+      kartaOslav(oslavyDne) +
+      '<p class="tlumene male">Uloženo jen v tomto telefonu.</p>' +
+      panelSdileni(v, okamzite, hodiny, cas, celkem, hodnocene, sFotkou, nastaveni.barva_dne_zapnuta ? den.barva : null, oslavyDne) +
       (nabidka.length ? '<section class="karta"><h2>Chceš zaznamenat ještě něco dalšího?</h2><div class="cipy">' +
         nabidka.map(([cast, text]) => '<button type="button" class="cip" data-akce="vecerDoplnit" data-cast="' + cast + '">' + h(text) + '</button>').join('') +
       '</div></section>' : '') +
-      '<div class="odkazy"><a class="tlacitko obrys" href="#/domov">Pro teď to stačí</a>' +
-      '<button type="button" class="tlacitko obrys" data-akce="vecerZpet">Upravit rozvrh dne</button></div>' +
+      '<div class="odkazy" style="flex-direction:column;align-items:stretch">' +
+        '<button type="button" class="tlacitko" data-akce="oslavaZacit" data-zpet="#/vecer/' + v.datum + '" data-datum="' + v.datum + '">Dnes chci oslavit…</button>' +
+        '<a class="tlacitko obrys" href="#/domov">Takhle mi to stačí</a></div>' +
+      '<div class="odkazy">' +
+      '<button type="button" class="tlacitko obrys male-t" data-akce="vecerZpet">Upravit rozvrh dne</button>' +
+      (nastaveni.barva_dne_zapnuta ? '<button type="button" class="tlacitko obrys male-t" data-akce="vecerBarva">Změnit barvu dne</button>' : '') + '</div>' +
     '</main>';
 }
 
@@ -1119,9 +1163,9 @@ async function obrazovkaVecer(parametr) {
 // Sdílí se jen na pokyn člověka a jen text, který vidí v náhledu.
 // Odchází přes běžné sdílení telefonu (zpráva, e-mail, chat) – aplikace
 // sama nic neposílá. Fotky a vlastní slova jsou ve výchozím stavu vypnuté.
-let sdileni = { otevreno: false, slova: false, okamzite: false, fotky: true, titulek: '', format: 'prispevek', obrazek: null, klicObrazku: null, pripravuji: false };
+let sdileni = { otevreno: false, slova: false, okamzite: false, fotky: true, oslavy: false, titulek: '', format: 'prispevek', obrazek: null, klicObrazku: null, pripravuji: false };
 
-function textSdileni(v, okamzite, hodiny, cas, celkem, hodnocene) {
+function textSdileni(v, okamzite, hodiny, cas, celkem, hodnocene, oslavy = []) {
   const d = new Date(v.datum + 'T12:00:00');
   const radky = ['Snímek dne ' + d.getDate() + '. ' + (d.getMonth() + 1) + '. (z aplikace Mám se!)'];
   radky.push(v.bloky.length + ' ' + (v.bloky.length === 1 ? 'blok' : v.bloky.length < 5 ? 'bloky' : 'bloků') + (celkem ? ', zhruba ' + hodiny(celkem) : ''));
@@ -1141,20 +1185,24 @@ function textSdileni(v, okamzite, hodiny, cas, celkem, hodnocene) {
       radky.push('• ' + cas2 + p + (slova ? ' ' + slova : ''));
     }
   }
+  for (const o of oslavy) {
+    if (o.vlastni_slova) radky.push('Dnes oslavuji: ' + o.vlastni_slova);
+    if (o.podekovani) radky.push('Děkuji: ' + o.podekovani);
+  }
   return radky.join('\n');
 }
 
-function panelSdileni(v, okamzite, hodiny, cas, celkem, hodnocene, fotky, barvaDne) {
+function panelSdileni(v, okamzite, hodiny, cas, celkem, hodnocene, fotky, barvaDne, oslavy = []) {
   if (!sdileni.otevreno) {
     return '<button type="button" class="tlacitko obrys male-t" style="align-self:flex-start" data-akce="sdiletOtevrit">Sdílet snímek dne…</button>';
   }
-  const text = textSdileni(v, okamzite, hodiny, cas, celkem, hodnocene);
+  const text = textSdileni(v, okamzite, hodiny, cas, celkem, hodnocene, sdileni.oslavy ? oslavy : []);
   // Obrázek se kreslí znovu jen tehdy, když se změní, co v něm má být.
-  const klic = [v.datum, sdileni.slova, sdileni.okamzite, sdileni.fotky, sdileni.format, barvaDne, text].join('|');
+  const klic = [v.datum, sdileni.slova, sdileni.okamzite, sdileni.fotky, sdileni.oslavy, sdileni.format, barvaDne, text].join('|');
   if (sdileni.klicObrazku !== klic && !sdileni.pripravuji) {
     sdileni.pripravuji = true;
     nakresliSnimekDne({ v, okamzite: sdileni.okamzite ? okamzite : [], hodiny, cas, celkem, hodnocene,
-      fotky: sdileni.fotky ? fotky : [], barvaDne }).then(blob => {
+      fotky: sdileni.fotky ? fotky : [], barvaDne, oslavy: sdileni.oslavy ? oslavy : [] }).then(blob => {
       if (sdileni.obrazek) URL.revokeObjectURL(sdileni.obrazek.url);
       sdileni.obrazek = { blob, url: URL.createObjectURL(blob) };
       sdileni.klicObrazku = klic;
@@ -1175,6 +1223,7 @@ function panelSdileni(v, okamzite, hodiny, cas, celkem, hodnocene, fotky, barvaD
       cip('příběh (na výšku)', sdileni.format === 'pribeh', 'sdiletFormat', { format: 'pribeh' }) + '</div>' +
     '<label class="prepinac-maly" style="font-size:15px"><input type="checkbox" data-akce="sdiletSlova"' + (sdileni.slova ? ' checked' : '') + '>Přidat moje vlastní slova</label>' +
     (okamzite.length ? '<label class="prepinac-maly" style="font-size:15px"><input type="checkbox" data-akce="sdiletOkamzite"' + (sdileni.okamzite ? ' checked' : '') + '>Přidat okamžité záznamy</label>' : '') +
+    (oslavy.length ? '<label class="prepinac-maly" style="font-size:15px"><input type="checkbox" data-akce="sdiletOslavy"' + (sdileni.oslavy ? ' checked' : '') + '>Přidat oslavu</label>' : '') +
     (fotky.length ? '<label class="prepinac-maly" style="font-size:15px"><input type="checkbox" data-akce="sdiletFotky"' + (sdileni.fotky ? ' checked' : '') + '>Přidat miniatury fotek</label>' : '') +
     nahled +
     '<pre class="nahled-sdileni skryte">' + h(text) + '</pre>' +
@@ -1236,6 +1285,11 @@ async function nakresliSnimekDne(d) {
   const radkySouhrnu = souhrn.flatMap(t => zalomText(ctx, t, SIRKA - 64));
   const radkyChvil = chvile.flatMap(t => zalomText(ctx, '• ' + t, SIRKA - 64));
   const radkyOkamzitych = okamzite.flatMap(o => zalomText(ctx, '• ' + o.text, SIRKA));
+  ctx.font = '500 34px ' + serif;
+  const radkyOslav = (d.oslavy || []).flatMap(o => [
+    ...(o.vlastni_slova ? zalomText(ctx, 'Dnes oslavuji: ' + o.vlastni_slova, SIRKA - 64) : []),
+    ...(o.podekovani ? zalomText(ctx, 'Děkuji: ' + o.podekovani, SIRKA - 64) : [])]);
+  ctx.font = '400 34px ' + sans;
   const poradiKat = Object.keys(KATEGORIE);
   const katB = b => kategorie(b.hodnotit ? b.prijemnost : null);
   const sBloky = d.v.bloky.filter(b => b.delkaMin)
@@ -1257,6 +1311,7 @@ async function nakresliSnimekDne(d) {
   ctx.font = '400 34px ' + sans;
   let H = P + 70 + 16 + 72 + 50 + 30;                        // hlavička: Mám se!, Snímek dne, datum
   H += 48 + radkySouhrnu.length * 48 + (radkyChvil.length ? 16 + radkyChvil.length * 46 : 0) + 48 + 32; // karta dne
+  if (radkyOslav.length) H += 40 + radkyOslav.length * 46 + 40 + 32;
   if (sBloky.length) H += 50 + 56 + 24 + 60 + 32;           // průběh dne
   if (okamzite.length) H += 50 + 50 + 50 + radkyOkamzitych.length * 46 + 32;
   if (fotky.length) H += radkuFotek * (VYSKA_FOTKY + MEZERA) + 32;
@@ -1291,6 +1346,19 @@ async function nakresliSnimekDne(d) {
   for (const r of radkySouhrnu) { ctx.fillText(r, P + 32, yy); yy += 48; }
   if (radkyChvil.length) { yy += 16; for (const r of radkyChvil) { ctx.fillText(r, P + 32, yy); yy += 46; } }
   y += vyskaKarty + 32;
+
+  // Oslava (jen když ji člověk zaškrtl)
+  if (radkyOslav.length) {
+    const vyska = 40 + radkyOslav.length * 46 + 40;
+    zaoblenyObdelnik(ctx, P, y, SIRKA, vyska, 36);
+    ctx.fillStyle = '#FDF3DC'; ctx.fill();
+    ctx.strokeStyle = '#F5BE4B'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = '#1F2A26'; ctx.font = '500 34px ' + serif;
+    let yo = y + 40;
+    for (const r of radkyOslav) { ctx.fillText(r, P + 32, yo); yo += 46; }
+    ctx.font = '400 34px ' + sans;
+    y += vyska + 32;
+  }
 
   // Průběh dne
   if (sBloky.length) {
@@ -1365,7 +1433,7 @@ async function nakresliSnimekDne(d) {
 
   // Patička
   ctx.font = '400 26px ' + sans; ctx.fillStyle = '#5E6B65';
-  ctx.fillText('Z aplikace Mám se! · Není to hodnocení – jen obrázek dne.', P, H - P - 30);
+  ctx.fillText('Z aplikace Mám se! od Emer · mimonadovna.cz', P, H - P - 30);
 
   // Příběh (Facebook, Instagram, WhatsApp): 1080 × 1920, obsah vystředěný.
   let vysledek = platno;
@@ -1381,16 +1449,23 @@ async function nakresliSnimekDne(d) {
   return new Promise(hotovo => vysledek.toBlob(hotovo, 'image/png'));
 }
 
+// Oslavy dne ve shrnutí
+function kartaOslav(oslavy) {
+  if (!oslavy.length) return '';
+  return '<section class="karta"><h2>Oslavy dne</h2><div class="seznam">' +
+    oslavy.map(z => radekSeznamu({ druh: 'zaznam', z })).join('') + '</div></section>';
+}
+
 // ---------------- GRAFIKA DNE ----------------
 // Barvy podle toho, jaká chvíle byla (stejné jako v Přehledu):
 // příjemná = svěží zelená, ani tak ani tak = béžová, nepříjemná = medová.
-// Nepopsané bloky jsou šrafované. Barva nikdy nenese význam sama –
+// Nepopsané bloky („neurčeno“) jsou šrafované. Barva nikdy nenese význam sama –
 // vždy je u ní i legenda a čísla.
 const KATEGORIE = {
   prijemna:   { text: 'příjemná',          barva: '#72B97F' },
   neutralni:  { text: 'ani tak, ani tak',  barva: '#D8CFC0' },
   neprijemna: { text: 'nepříjemná',        barva: '#E6B173' },
-  nepopsana:  { text: 'nepopsaná',         barva: null }
+  nepopsana:  { text: 'neurčeno',          barva: null }
 };
 function kategorie(prijemnost) {
   if (prijemnost == null) return 'nepopsana';
@@ -1404,7 +1479,7 @@ function stylKategorie(k) {
 
 // Průběh dne: bloky za sebou, šířka podle délky.
 function grafBloku(bloky, hodiny) {
-  // Seřazeno jako legenda: příjemná, ani tak ani tak, nepříjemná, nepopsaná
+  // Seřazeno jako legenda: příjemná, ani tak ani tak, nepříjemná, neurčeno
   // (uvnitř skupiny v pořadí dne).
   const poradiKat = Object.keys(KATEGORIE);
   const katBloku = b => kategorie(b.hodnotit ? b.prijemnost : null);
@@ -1466,6 +1541,114 @@ function nahledyFotek(zaznamy) {
     '</div></section>';
 }
 
+// ---------------- OSLAVA DNE ----------------
+// „Dnes chci oslavit…“ – vlastní slova, naplněné potřeby, komu poděkovat.
+// Ukládá se jako záznam typu „oslava“. Tlačítko „Oslavit!“ spustí
+// animaci podle skupiny nejplnější vybrané potřeby (viz js/oslava.js).
+
+let oslava = null;
+
+function novaOslava(zpet, datum) {
+  return { id: U.noveId(), vytvoreno: U.tedS(), datum: datum || U.datumDne(), zpet: zpet || '#/domov',
+    text: '', potreby: {}, otevrenaSkupina: null, vlastniPotreba: false, podekovani: '', ulozena: false };
+}
+
+function oslavaZeZaznamu(z, zpet) {
+  const o = novaOslava(zpet, z.chvile_od.slice(0, 10));
+  Object.assign(o, { id: z.id, vytvoreno: z.vytvoreno, text: z.vlastni_slova || '', podekovani: z.podekovani || '', ulozena: true, puvodni: z });
+  for (const p of z.potreby) o.potreby[p.potreba] = { naplneni: p.naplneni };
+  return o;
+}
+
+// Barva dne pro animaci (jen když je barva dne zapnutá a zvolená).
+async function barvaDneK(datum) {
+  if (!nastaveni.barva_dne_zapnuta) return null;
+  const den = await U.nactiDen(datum);
+  return den && den.barva ? den.barva : null;
+}
+
+// Která animace: skupina potřeby s nejplnější skleničkou (při shodě ta první vybraná).
+function druhOslavy(potreby) {
+  let nejlepsi = null;
+  for (const [potreba, v] of Object.entries(potreby)) {
+    const skupina = S.skupinaPotreby(potreba);
+    if (!skupina) continue;
+    const n = v.naplneni ?? 0;
+    if (!nejlepsi || n > nejlepsi.n) nejlepsi = { skupina, n };
+  }
+  return nejlepsi ? ANIMACE_PODLE_SKUPINY[nejlepsi.skupina] : 'konfety';
+}
+
+function obrazovkaOslava() {
+  if (!oslava) oslava = novaOslava();
+  const o = oslava;
+  let skupiny = '';
+  for (const g of S.POTREBY) {
+    const maVybrane = g.potreby.some(p => o.potreby[p]);
+    skupiny += cip(g.skupina, o.otevrenaSkupina === g.skupina || maVybrane, 'oslavaSkupina', { skupina: g.skupina });
+  }
+  skupiny += '<button type="button" class="cip pridat" data-akce="oslavaVlastniOtevrit">+ vlastní</button>';
+  let panel = '';
+  if (o.otevrenaSkupina) {
+    const g = S.POTREBY.find(x => x.skupina === o.otevrenaSkupina);
+    panel = '<div class="panel"><span class="panel-nadpis">Potřeby ve skupině „' + h(g.skupina) + '“</span><div class="cipy">' +
+      g.potreby.map(p => cip(p, o.potreby[p], 'oslavaPotreba', { slovo: p })).join('') + '</div></div>';
+  }
+  const vlastni = o.vlastniPotreba
+    ? '<div class="pole-radek"><input class="vstup" id="oslava-vlastni" placeholder="Tvoje slovo pro potřebu" autocomplete="off">' +
+      '<button type="button" class="tlacitko male-t" data-akce="oslavaVlastniPridat">Přidat</button></div>' : '';
+  let sklenicky = '';
+  for (const [potreba, v] of Object.entries(o.potreby)) {
+    let hladiny = '';
+    for (let i = 0; i <= 4; i++) {
+      hladiny += '<button type="button" data-akce="oslavaNaplneni" data-slovo="' + h(potreba) + '" data-hodnota="' + i +
+        '" aria-pressed="' + (v.naplneni === i) + '" aria-label="' + h(potreba) + ': naplnění ' + i + ' ze 4">' + i + '</button>';
+    }
+    sklenicky += '<div class="sklenicka-radek">' + sklenicka(v.naplneni, false) + '<span class="jmeno">' + h(potreba) + '</span>' +
+      '<div class="sklenicka-ovladani"><div class="hladiny" role="group" aria-label="Jak je naplněná">' + hladiny + '</div>' +
+      '<button type="button" class="tlacitko obrys male-t" data-akce="oslavaPotreba" data-slovo="' + h(potreba) + '">Odebrat</button></div></div>';
+  }
+  const pole = (cil, id, popisek, placeholder) => '<div class="pole"><textarea id="' + id + '" rows="3" data-oslava-pole="' + cil + '" aria-label="' + h(popisek) + '"' +
+    (placeholder ? ' placeholder="' + h(placeholder) + '"' : '') + '>' + h(o[cil]) + '</textarea>' +
+    (tlacitkoDiktovani(cil === 'text' ? 'oslavaText' : 'oslavaDik') ? '<div class="pole-radek"><span></span>' + tlacitkoDiktovani(cil === 'text' ? 'oslavaText' : 'oslavaDik') + '</div>' : '') + '</div>';
+
+  return '<header class="hlavicka">' +
+      '<a class="ikona-tlacitko bez-okraje" href="' + o.zpet + '" aria-label="Zpět">' + IKONA.zpet + '</a>' +
+      '<span class="nazev-obrazovky">Oslava</span></header>' +
+    '<main class="obsah">' +
+      '<div class="oddil" style="border-top:none;padding-top:0;margin-top:0"><label class="oddil-nadpis" for="oslava-text" style="font-size:26px">Dnes chci oslavit…</label>' +
+        pole('text', 'oslava-text', 'Dnes chci oslavit', 'Napiš nebo nadiktuj, co se povedlo, co Tě potěšilo…') + '</div>' +
+      '<div class="oddil"><h3 class="oddil-nadpis">Jaké potřeby byly naplněny?</h3>' +
+        '<div class="cipy">' + skupiny + '</div>' + vlastni + panel +
+        (sklenicky ? '<div class="vybrane">' + sklenicky + '</div>' : '') + '</div>' +
+      '<div class="oddil"><label class="oddil-nadpis" for="oslava-dik">Komu chci poděkovat?' +
+        '<span class="oddil-pozn">Klidně můžeš poděkovat sobě nebo celému světu.</span></label>' +
+        pole('podekovani', 'oslava-dik', 'Komu chci poděkovat') + '</div>' +
+    '</main>' +
+    '<footer class="spodni-lista">' +
+      '<button type="button" class="tlacitko obrys" data-akce="oslavaUlozit">Takhle je to dobré</button>' +
+      '<button type="button" class="tlacitko" data-akce="oslavaUlozit" data-oslavit="1">Oslavit!</button>' +
+    '</footer>';
+}
+
+async function ulozOslavu() {
+  const o = oslava;
+  const kdy = o.datum === U.datumDne() ? (o.puvodni ? o.puvodni.chvile_od : U.tedS()) : U.tedS(new Date(o.datum + 'T20:00:00'));
+  const zaznam = Object.assign({}, o.puvodni || {}, {
+    id: o.id, typ: 'oslava', vytvoreno: o.vytvoreno, upraveno: o.ulozena ? U.tedS() : null,
+    chvile_od: kdy, chvile_delka_min: null, poradi: null, smysluplnost: null,
+    prijemnost: null, vlastni_slova: o.text.trim(), podekovani: o.podekovani.trim(),
+    emoce: [], telo: [], strategie: '', prosba: '', cinnost: [], s_kym: [], kde: null, vyzkum: null,
+    fotka: (o.puvodni && o.puvodni.fotka) || null,
+    potreby: Object.entries(o.potreby).map(([potreba, v]) => ({ potreba, skupina: S.skupinaPotreby(potreba), naplneni: v.naplneni, skripnuta: false })),
+    zdroj_textu: o.text.trim() ? 'psano' : null,
+    verze_protokolu: S.VERZE_PROTOKOLU
+  });
+  await U.ulozZaznam(zaznam);
+  o.ulozena = true; o.puvodni = zaznam;
+  return zaznam;
+}
+
 // ---------------- DETAIL ZÁZNAMU ----------------
 async function obrazovkaDetail(id) {
   const z = await U.nactiZaznam(id);
@@ -1501,7 +1684,8 @@ async function obrazovkaDetail(id) {
         radek('Jaká byla chvíle', prijemnost) +
         (z.fotka ? '<img class="fotka-velka" src="' + urlFotky(z.fotka) + '" alt="Fotka u záznamu">' : '') +
         radek('Kus dne', z.popis_bloku ? h(z.popis_bloku) : '') +
-        radek('Vlastními slovy', z.vlastni_slova ? h(z.vlastni_slova).replace(/\n/g, '<br>') : '') +
+        (z.typ === 'oslava' ? radek('Dnes chci oslavit…', h(z.vlastni_slova)) + radek('Poděkování', h(z.podekovani || '')) : '') +
+        radek('Vlastními slovy', z.typ !== 'oslava' && z.vlastni_slova ? h(z.vlastni_slova).replace(/\n/g, '<br>') : '') +
         radek('Emoce', emoce) +
         radek('V těle', telo) +
         (potreby ? '<div style="display:flex;flex-direction:column;gap:6px"><span class="panel-nadpis">Potřeby</span>' + potreby + '</div>' : '') +
@@ -1513,7 +1697,10 @@ async function obrazovkaDetail(id) {
         radek('Pro výzkum', vyzkum) +
         (z.upraveno ? '<p class="tlumene male">Doplněno ' + h(casZaznamu(z.upraveno)) + '</p>' : '') +
       '</section>' +
-      '<button type="button" class="tlacitko" style="align-self:flex-start" data-akce="upravitZaznam" data-id="' + h(z.id) + '">Doplnit nebo upravit</button>' +
+      (z.typ === 'oslava'
+        ? '<div class="odkazy"><button type="button" class="tlacitko" data-akce="oslavaZnovu" data-id="' + h(z.id) + '">Oslavit znovu!</button>' +
+          '<button type="button" class="tlacitko obrys" data-akce="oslavaUpravit" data-id="' + h(z.id) + '">Upravit</button></div>'
+        : '<button type="button" class="tlacitko" style="align-self:flex-start" data-akce="upravitZaznam" data-id="' + h(z.id) + '">Doplnit nebo upravit</button>') +
       mazani +
     '</main>';
 }
@@ -1564,7 +1751,7 @@ function chybejiciCasti(k) {
   if (k.prijemnost == null || (!Object.keys(k.emoce).length && !k.text.trim())) chybi.push(['zaklad', 'Jaká je chvíle a co cítíš']);
   if (!Object.keys(k.telo).length) chybi.push(['telo', 'Co cítíš v těle']);
   if (!Object.keys(k.potreby).length) chybi.push(['potreby', 'Co je teď živé (potřeby)']);
-  if (!k.cinnost.length && !k.sKym.length && !k.kde) chybi.push(['kolem', 'Co se děje kolem']);
+  if (!k.cinnost.length && !k.sKym.length && !k.kde) chybi.push(['kolem', 'Co se teď děje']);
   if (!k.strategie.trim() && !k.prosba.trim()) chybi.push(['pomuze', 'Co by Ti teď mohlo udělat dobře']);
   if (!k.fotka) chybi.push(['fotka', 'Fotka']);
   if (!Object.keys(k.vyzkum).length) chybi.push(['vyzkum', 'Pro výzkum']);
@@ -1606,6 +1793,7 @@ function obrazovkaHotovo() {
       '<p class="tlumene male">Záznam je jen v tomto telefonu.</p>' +
       karta +
       dalsiNabidka +
+      '<button type="button" class="tlacitko" style="align-self:flex-start" data-akce="oslavaZacit" data-zpet="#/hotovo">Dnes chci oslavit…</button>' +
       '<a class="tlacitko obrys" href="#/domov" style="align-self:flex-start">Pro teď to stačí</a>' +
     '</main>';
 }
@@ -1870,15 +2058,51 @@ const AKCE = {
     vecer.upravovany = null; vecer.rozpracovany = null;
     prekresli();
   },
+  // ---- Oslava ----
+  oslavaZacit(d) { oslava = novaOslava(d.zpet, d.datum); location.hash = '#/oslava'; },
+  async oslavaUpravit(d) { oslava = oslavaZeZaznamu(await U.nactiZaznam(d.id), '#/detail/' + encodeURIComponent(d.id)); location.hash = '#/oslava'; },
+  async oslavaZnovu(d) {
+    const z = await U.nactiZaznam(d.id);
+    await spustOslavu(druhOslavy(Object.fromEntries(z.potreby.map(p => [p.potreba, p]))), z.vlastni_slova, await barvaDneK(z.chvile_od.slice(0, 10)));
+  },
+  oslavaSkupina(d) { oslava.otevrenaSkupina = oslava.otevrenaSkupina === d.skupina ? null : d.skupina; prekresli(); },
+  oslavaPotreba(d) {
+    if (oslava.potreby[d.slovo]) delete oslava.potreby[d.slovo];
+    else oslava.potreby[d.slovo] = { naplneni: 4 }; // naplněná potřeba – sklenička plná, jde snížit
+    prekresli();
+  },
+  oslavaNaplneni(d) { oslava.potreby[d.slovo].naplneni = parseInt(d.hodnota, 10); prekresli(); },
+  oslavaVlastniOtevrit() { oslava.vlastniPotreba = true; prekresli(); document.getElementById('oslava-vlastni')?.focus(); },
+  oslavaVlastniPridat() {
+    const t = document.getElementById('oslava-vlastni').value.trim().toLowerCase();
+    if (t) oslava.potreby[t] = { naplneni: 4 };
+    oslava.vlastniPotreba = false;
+    prekresli();
+  },
+  async oslavaUlozit(d) {
+    if (!oslava.text.trim() && !Object.keys(oslava.potreby).length && !oslava.podekovani.trim()) {
+      oslava.text = ''; // prázdná oslava se neukládá, ale oslavit jde i tak
+      if (d.oslavit) await spustOslavu('konfety', '', await barvaDneK(oslava.datum));
+      location.hash = oslava.zpet; oslava = null; return;
+    }
+    if (diktovani) diktovani.stop();
+    const z = await ulozOslavu();
+    if (d.oslavit) await spustOslavu(druhOslavy(oslava.potreby), z.vlastni_slova, await barvaDneK(oslava.datum));
+    else oznam('Uloženo.');
+    const zpet = oslava.zpet; oslava = null;
+    location.hash = zpet;
+  },
+
   sdiletOtevrit() { sdileni.otevreno = true; prekresli(); },
   sdiletZavrit() {
     if (sdileni.obrazek) URL.revokeObjectURL(sdileni.obrazek.url);
-    sdileni = { otevreno: false, slova: false, okamzite: false, fotky: true, titulek: '', format: 'prispevek', obrazek: null, klicObrazku: null, pripravuji: false };
+    sdileni = { otevreno: false, slova: false, okamzite: false, fotky: true, oslavy: false, titulek: '', format: 'prispevek', obrazek: null, klicObrazku: null, pripravuji: false };
     prekresli();
   },
   sdiletSlova(d, el) { sdileni.slova = el.checked; prekresli(); },
   sdiletOkamzite(d, el) { sdileni.okamzite = el.checked; prekresli(); },
   sdiletFotky(d, el) { sdileni.fotky = el.checked; prekresli(); },
+  sdiletOslavy(d, el) { sdileni.oslavy = el.checked; prekresli(); },
   sdiletTitulek(d, el) { sdileni.titulek = el.value; prekresli(); },
   sdiletFormat(d) { sdileni.format = d.format; prekresli(); },
   async sdiletTed() {
@@ -1907,15 +2131,17 @@ const AKCE = {
     catch (e) { oznam('Kopírování nejde – text můžeš označit a zkopírovat ručně.'); }
   },
   vecerNovy() { vecer.krok = 'bloky'; vecer.upravovany = 'novy'; vecer.rozpracovany = novyBlok(); prekresli(); },
-  async vecerNacist() {
+  async vecerNacist(d) {
+    const zdroj = (d && d.zdroj) || vecer.predchoziDen;
     const z = (await U.vsechnyZaznamy())
-      .filter(x => x.typ === 'vecerni' && x.poradi != null && x.chvile_od.slice(0, 10) === vecer.predchoziDen)
+      .filter(x => x.typ === 'vecerni' && x.poradi != null && x.chvile_od.slice(0, 10) === zdroj)
       .sort((a, b) => a.poradi - b.poradi);
     // Přebíráme jen rozvrh (co, jak dlouho, s kým, kde) – ne pocity ani hodnocení.
     vecer.bloky = z.map(x => Object.assign(novyBlok(), {
       popis: x.popis_bloku || '', cinnost: [...(x.cinnost || [])], delkaMin: x.chvile_delka_min, sKym: [...(x.s_kym || [])], kde: x.kde
     }));
     vecer.krok = 'bloky';
+    vecer.upravovany = null; vecer.rozpracovany = null; vecer.vlastniCinnost = false;
     prekresli();
   },
   vecerOdlozit() {
@@ -1952,6 +2178,7 @@ const AKCE = {
     prekresli();
     window.scrollTo(0, 0);
   },
+  vecerBarva() { vecer.krok = 'barva'; prekresli(); window.scrollTo(0, 0); },
   vecerShrnuti() { vecer.krok = 'shrnuti'; prekresli(); window.scrollTo(0, 0); },
   vecerDoplnit(d) {
     if (d.cast === 'chvile') {
@@ -2289,6 +2516,7 @@ async function vykresli() {
     case 'detail':     html = await obrazovkaDetail(decodeURIComponent(parametr)); break;
     case 'den':        html = await obrazovkaDen(parametr); break;
     case 'vecer':      html = await obrazovkaVecer(parametr); break;
+    case 'oslava':     html = obrazovkaOslava(); break;
     default:           html = await obrazovkaDomov();
   }
   // Rozbalené části zůstanou rozbalené i po překreslení.
@@ -2413,6 +2641,7 @@ app.addEventListener('input', (ev) => {
   if (el.tagName === 'TEXTAREA') rozvinPole(el);
   if (el.dataset.blokText != null && vecer) { vecer.bloky[+el.dataset.blokText].text = el.value; return; }
   if (el.dataset.blokPopis && vecer && vecer.rozpracovany) { vecer.rozpracovany.popis = el.value; return; }
+  if (el.dataset.oslavaPole && oslava) { oslava[el.dataset.oslavaPole] = el.value; return; }
   if (!koncept) return;
   if (el.id === 'text') {
     koncept.text = el.value;
@@ -2430,6 +2659,7 @@ app.addEventListener('keydown', (ev) => {
   if (ev.target.id === 'vlastni-potreba') { ev.preventDefault(); AKCE.vlastniPotrebaPridat(); }
   if (ev.target.id === 'uprava-slova') { ev.preventDefault(); AKCE.slovoUlozit(); }
   if (ev.target.id === 'vlastni-cinnost') { ev.preventDefault(); AKCE.blokVlastniPridat(); }
+  if (ev.target.id === 'oslava-vlastni') { ev.preventDefault(); AKCE.oslavaVlastniPridat(); }
 });
 
 window.addEventListener('hashchange', vykresli);

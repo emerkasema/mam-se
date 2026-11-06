@@ -122,9 +122,9 @@ export function skupinaPotreby(potreba) {
 // ---------------------------------------------------------------------
 export const CINNOSTI = [
   'práce', 'škola, studium', 'cesta, dojíždění', 'domácí práce', 'vaření', 'jídlo',
-  'nakupování, vyřizování', 'péče o druhé', 'osobní péče, hygiena', 'pohyb, sport',
+  'nakupování, vyřizování', 'péče o blízké', 'osobní péče, hygiena', 'pohyb, sport',
   'venku, příroda, procházka', 'odpočinek, nicnedělání', 'šlofíček',
-  'telefon, sociální sítě', 'film, seriál, video', 'hry', 'četba', 'tvorba, koníček',
+  'telefon, sociální sítě', 'film, podcast, videa', 'hry', 'četba', 'tvorba, koníček',
   'učení se něčemu novému', 'setkání, povídání, společný čas', 'intimita',
   'telefonát, zprávy', 'úřady, finance, administrativa', 'zdraví, lékař, terapie',
   'duchovní praxe, meditace', 'dobrovolnictví, pomoc druhým'

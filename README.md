@@ -2,7 +2,7 @@
 
 Osobní deník pohody. Webová aplikace (PWA), která běží v telefonu a všechno, co do ní člověk zapíše, nechává jen v jeho telefonu.
 
-**Verze 0.4.0 – první prototyp:** Domov, okamžitý záznam s fotkou, večerní ohlédnutí s rozvrhem dne, shrnutí a snímek dne ke sdílení, barva dne, detail a doplňování záznamů, pomoc, připomínka do kalendáře, nastavení se zálohou.
+**Verze 0.5.0 – první prototyp:** Domov, okamžitý záznam s fotkou, večerní ohlédnutí s rozvrhem dne, shrnutí a snímek dne ke sdílení, oslava dne s animacemi, barva dne, detail a doplňování záznamů, pomoc, připomínka do kalendáře, nastavení se zálohou.
 
 ## Co je v kterém souboru
 
@@ -12,6 +12,7 @@ Osobní deník pohody. Webová aplikace (PWA), která běží v telefonu a všec
 | `styl.css` | Vzhled: barvy (nahoře v `:root`), písmo, tlačítka, karty. |
 | `js/app.js` | Program: obrazovky, klepnutí, ukládání záznamu, pomoc. |
 | `js/slovniky.js` | Slova, která aplikace nabízí: emoce, tělo, potřeby, činnosti. Tady se slova přidávají a opravují. |
+| `js/oslava.js` | Animace oslav (konfety, deka, drink…). |
 | `js/uloziste.js` | Ukládání do telefonu (IndexedDB), záloha a obnova. |
 | `sw.js` | Díky němu aplikace funguje i bez internetu. **Po každé změně souborů zvyš číslo `VERZE`.** |
 | `manifest.webmanifest` | Název a ikony pro přidání na plochu. |

@@ -6,7 +6,7 @@
 // Telefony tak poznají, že si mají stáhnout novou verzi.
 // =====================================================================
 
-const VERZE = 'mamse-v0.4.0';
+const VERZE = 'mamse-v0.5.0';
 
 const SOUBORY = [
   './',
@@ -16,6 +16,7 @@ const SOUBORY = [
   'js/app.js',
   'js/slovniky.js',
   'js/uloziste.js',
+  'js/oslava.js',
   'fonty/Inter-Regular.woff',
   'fonty/Inter-Medium.woff',
   'fonty/Inter-SemiBold.woff',
