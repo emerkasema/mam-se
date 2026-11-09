@@ -202,6 +202,28 @@ details.karta[open] summary::after { content: '－'; }
 
 /* ---------- Týden ---------- */
 .prehled-tydnu { justify-content: space-between; }
+/* Můj přehled */
+.kalendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.kal-hlava { text-align: center; font-size: 12px; color: var(--druhotny); }
+.kal-den { height: 40px; border-radius: 20px; border: 1.5px solid var(--linka); background: transparent; font: inherit; font-size: 14px; font-weight: 600; color: var(--inkoust); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+.kal-den.budouci { border-style: dotted; opacity: .45; cursor: default; }
+.kal-den.dnes { border-style: dashed; border-color: #8A7F70; }
+.kal-den.vybrany { box-shadow: 0 0 0 3px var(--plocha), 0 0 0 5.5px #E6B173; }
+.karta-dne p { margin: 0; line-height: 1.5; }
+.cip.staticky { cursor: default; background: transparent; display: inline-flex; align-items: center; gap: 4px; }
+.karta.jemna { background: #EFE8DD; border-color: transparent; }
+.tydny-prehled { display: flex; flex-direction: column; gap: 4px; }
+.tyden-radek { display: grid; grid-template-columns: 7.5em 1fr auto; align-items: center; gap: 10px; padding: 6px 4px; border-radius: 10px; color: inherit; text-decoration: none; font-size: 14px; }
+a.tyden-radek:hover { background: var(--jemna-zelena); }
+.tyden-popis { white-space: nowrap; }
+.tecka { display: inline-block; width: 10px; height: 10px; border-radius: 5px; vertical-align: middle; }
+.pruh-dne.maly { height: 12px; }
+.who5-graf { display: flex; align-items: flex-end; gap: 8px; height: 150px; }
+.who5-sloupec { flex: 1; max-width: 48px; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; color: inherit; text-decoration: none; }
+.who5-sloupek { width: 100%; border-radius: 8px 8px 3px 3px; background: var(--lahvova); }
+.who5-hodnota { font-size: 13px; font-weight: 600; }
+.sklenicky-prehled { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 6px; }
+.sklenicka-polozka { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; font-size: 13px; }
 .prehled-tydnu .ikona-tlacitko { font-size: 28px; line-height: 1; width: 40px; height: 40px; }
 .prehled-tydnu .ikona-tlacitko:disabled { opacity: .25; }
 .tyden { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }

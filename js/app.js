@@ -274,7 +274,7 @@ function poznanaSlova(text) {
 function navigace(aktivni) {
   return '<nav class="navigace" aria-label="Hlavní navigace">' +
     '<a href="#/domov"' + (aktivni === 'domov' ? ' aria-current="page"' : '') + '>' + IKONA.domov + 'Domov</a>' +
-    '<span class="brzy" aria-disabled="true">' + IKONA.prehled + 'Přehled (brzy)</span>' +
+    '<a href="#/prehled"' + (aktivni === 'prehled' ? ' aria-current="page"' : '') + '>' + IKONA.prehled + 'Přehled</a>' +
     '<a href="#/nastaveni"' + (aktivni === 'nastaveni' ? ' aria-current="page"' : '') + '>' + IKONA.nastaveni + 'Nastavení</a>' +
     '</nav>';
 }
@@ -305,8 +305,8 @@ function shrnutiZaznamu(z) {
 }
 
 // Seskupí večerní záznamy podle dne do jednoho balíčku; okamžité zůstanou samostatně.
-function polozkySeznamu(zaznamy) {
-  const polozky = [], vecery = new Map();
+function polozkySeznamu(zaznamy, tydny = []) {
+  const polozky = tydny.map(t => ({ druh: 'tyden', t, kdy: t.upraveno || t.vytvoreno || rozsahTydne(t.tyden).do + 'T23:59:00' })), vecery = new Map();
   for (const z of zaznamy) {
     if (z.typ !== 'vecerni') { polozky.push({ druh: 'zaznam', z, kdy: z.upraveno || z.vytvoreno }); continue; }
     const datum = z.chvile_od.slice(0, 10);
@@ -335,6 +335,19 @@ function radekSeznamu(polozka) {
       (z.typ === 'oslava' ? '<span class="znamka oslava" aria-label="Oslava">' + IKONA.hvezda + '</span>' : znamkaPrijemnosti(z.prijemnost)) +
       '<div><div class="tlumene male">' + popisCasu(z) + '</div><div>' + h(shrnutiZaznamu(z)) + '</div></div>' +
       (z.fotka ? '<img class="miniatura" src="' + urlFotky(z.fotka) + '" alt="">' : '<span class="sipka" aria-hidden="true">›</span>') + '</a>';
+  }
+  if (polozka.druh === 'tyden') {
+    const t = polozka.t, r = rozsahTydne(t.tyden);
+    const casti = [];
+    if (t.podily) casti.push('příjemný čas ' + t.podily.prijemny + ' %');
+    if (t.who5) casti.push('pohoda ' + t.who5.index + '/100');
+    const text = t.vzpominka || t.tema || t.dal || '';
+    return '<a class="zaznam-radek" href="#/tyden/' + t.tyden + '">' +
+      '<span class="znamka" aria-hidden="true"' + (t.barva ? ' style="background:' + t.barva + ';color:' + inkoustPro(t.barva) + '"' : '') + '>' + IKONA.prehled + '</span>' +
+      '<div><div class="tlumene male">' + h(r.text) + ' · týdenní ohlédnutí</div>' +
+      '<div>' + h(text || casti.join(' · ') || 'beze slov') + '</div>' +
+      (text && casti.length ? '<div class="tlumene male">' + h(casti.join(' · ')) + '</div>' : '') + '</div>' +
+      '<span class="sipka" aria-hidden="true">›</span></a>';
   }
   // Balíček večerního ohlédnutí: aktivity pod sebou
   const bloky = polozka.zaznamy.filter(z => z.poradi != null).sort((a, b) => a.poradi - b.poradi);
@@ -406,7 +419,8 @@ async function obrazovkaDomov() {
     : '';
 
   // Posledních pět položek. Večerní ohlédnutí jednoho dne = jeden balíček.
-  const seznam = polozkySeznamu(vse).slice(0, 5).map(radekSeznamu).join('');
+  const tydny = (await U.vsechnyTydny()).filter(t => t.vyplneno);
+  const seznam = polozkySeznamu(vse, tydny).slice(0, 5).map(radekSeznamu).join('');
 
   const rozepsano = maObsah(koncept) && !koncept.ulozeno
     ? '<a class="tlacitko jemne" href="#/zaznam">Pokračovat v rozepsaném záznamu</a>' : '';
@@ -940,17 +954,10 @@ function titulekBloku(b, nahradni) {
 }
 
 // Aplikace vybere 2–3 chvíle: nejdelší bloky, každý s jinou činností.
+// Rozbalí všechny chvíle dne. Vynechat jde tlačítkem „Vynechat“ nebo tím,
+// že ji člověk nevyplní. Ručně vynechané zůstanou vynechané.
 function vyberChvile() {
-  if (vecer.bloky.some(b => b.hodnotit)) return; // už vybrané (nebo ručně upravené)
-  const serazene = vecer.bloky.map((b, i) => ({ b, i })).sort((x, y) => (y.b.delkaMin || 0) - (x.b.delkaMin || 0));
-  const cinnosti = new Set();
-  let pocet = 0;
-  for (const { b } of serazene) {
-    if (pocet >= 3) break;
-    const klic = b.cinnost.join('+');
-    if (cinnosti.has(klic) && serazene.length > 3) continue;
-    b.hodnotit = true; cinnosti.add(klic); pocet++;
-  }
+  for (const b of vecer.bloky) if (!b.vynechano) b.hodnotit = true;
 }
 
 // Uloží všechny bloky jako záznamy (nové přidá, upravené přepíše).
@@ -1031,11 +1038,15 @@ function hlavickaVecera(nazev, zpet) {
 function nazevDneVecera() {
   if (vecer.datum === U.datumDne()) return 'Večerní ohlédnutí';
   const d = new Date(vecer.datum + 'T12:00:00');
-  return 'Ohlédnutí · ' + d.getDate() + '. ' + (d.getMonth() + 1) + '.';
+  const den = new Intl.DateTimeFormat('cs-CZ', { weekday: 'long' }).format(d);
+  return 'Ohlédnutí · ' + d.getDate() + '. ' + (d.getMonth() + 1) + '. · ' + den;
 }
 
 async function obrazovkaVecer(parametr) {
   const datum = /^\d{4}-\d{2}-\d{2}$/.test(parametr || '') ? parametr : await denKOhlednuti();
+  // Den se zapíše do adresy, aby ohlédnutí zůstalo u něj i po uložení
+  // (jinak by se po dokončení včerejška samo otevřelo dnešní ohlédnutí).
+  if (!parametr) history.replaceState(null, '', '#/vecer/' + datum);
   await pripravVecer(datum);
   const v = vecer;
 
@@ -1140,12 +1151,12 @@ async function obrazovkaVecer(parametr) {
     });
     const ostatni = v.bloky.map((b, i) => ({ b, i })).filter(x => !x.b.hodnotit);
     const dalsi = ostatni.length
-      ? '<section class="karta"><h2>Chceš popsat i další chvíle?</h2><div class="cipy">' +
+      ? '<section class="karta"><h2>Vynechané chvíle</h2><div class="cipy">' +
         ostatni.map(({ b, i }) => '<button type="button" class="cip" data-akce="blokHodnotit" data-index="' + i + '">' + h(titulekBloku(b, 'blok ' + (i + 1))) + ' · ' + h(delkaText(b.delkaMin)) + '</button>').join('') +
         '</div></section>' : '';
     return hlavickaVecera(nazevDneVecera(), '#/vecer/' + v.datum) +
       '<main class="obsah">' +
-        '<div><h1 style="font-size:26px">Pár chvil z Tvého dne</h1><p class="tlumene">Nabízím ty nejdelší. Kteroukoli můžeš vynechat nebo přidat jinou.</p></div>' +
+        '<div><h1 style="font-size:26px">Pár chvil z Tvého dne</h1><p class="tlumene">Kteroukoli chvíli můžeš vynechat – tlačítkem, nebo ji prostě nevyplň.</p></div>' +
         karty + dalsi +
       '</main>' +
       '<footer class="spodni-lista">' +
@@ -1660,6 +1671,7 @@ function nahledyFotek(zaznamy) {
 
 let oslava = null;
 let posunTydne = 0;  // přehled týdnů na Domově: 0 = tento týden, -1 = minulý…
+let prehled = { mesic: 0, den: null }; // Můj přehled: posun měsíce a vybraný den
 let prosba = null;  // rozepsaná prosba (jen v paměti)
 let sdileniOslavy = null; // sdílení jedné oslavy (obrázek s textem)
 let posledniOslava = null; // naposledy uložená oslava – aby šla hned sdílet
@@ -2259,7 +2271,7 @@ async function pripravTyden(kod) {
     kod, data: datTydne(kod, vse), bezny, pocetBeznych: predchozi.length, minulyWho5: minuly,
     barvyDnu: [],
     barva: ulozeny ? ulozeny.barva || null : null,
-    pomohlo: ulozeny ? ulozeny.pomohlo || '' : '', nevyreseno: ulozeny ? ulozeny.nevyreseno || '' : '', prekvapilo: ulozeny ? ulozeny.prekvapilo || '' : '',
+    vzpominka: ulozeny ? ulozeny.vzpominka || '' : '', tema: ulozeny ? ulozeny.tema || '' : '', dal: ulozeny ? ulozeny.dal || '' : '',
     who5: ulozeny && ulozeny.who5 ? [...ulozeny.who5.odpovedi] : [null, null, null, null, null],
     ukazatWho5: !!(ulozeny && ulozeny.who5) || !who5Minule,
     ulozeny: ulozeny || null
@@ -2327,9 +2339,9 @@ function obrazovkaTyden() {
         '<p class="tlumene male">Záznamů za týden: ' + t.data.pocet + '</p></section>' +
       barva +
       '<section class="karta">' +
-        otazka('pomohlo', 'Co Ti pomohlo?') +
-        otazka('nevyreseno', 'Co zůstalo neřešené?') +
-        otazka('prekvapilo', 'Co Tě na tomto týdnu překvapilo?') +
+        otazka('vzpominka', 'Jak budeš na tento týden vzpomínat?') +
+        otazka('tema', 'Bylo nějaké téma týdne?') +
+        otazka('dal', 'Co z tohoto týdne s Tebou půjde dál životem?') +
       '</section>' +
       who5 +
       '<p class="tlumene male">Uloží se jen v tomto telefonu.</p>' +
@@ -2338,6 +2350,186 @@ function obrazovkaTyden() {
       '<a class="tlacitko obrys" href="#/domov">Teď ne</a>' +
       '<button type="button" class="tlacitko" data-akce="tydenUlozit">Uložit</button>' +
     '</footer>';
+}
+
+// ---------------- MŮJ PŘEHLED ----------------
+// Kalendář barev dnů, průběh týdnů, WHO-5, nejčastější slova a souvislosti.
+// Každá vrstva zvlášť, žádné celkové skóre. Souvislost nikdy není příčina.
+
+function kategorieBloku(z) {
+  if (z.prijemnost == null) return null;
+  return z.prijemnost > 0 ? 'prijemny' : z.prijemnost < 0 ? 'neprijemny' : 'neutralni';
+}
+
+// „Ve Tvých záznamech se spolu častěji objevuje…“ – činnost nebo společnost
+// a příjemný/nepříjemný čas. Jen když je dost dat (aspoň 3 chvíle s tou věcí).
+function souvislosti(vse) {
+  const od = new Date(); od.setDate(od.getDate() - 28);
+  const bloky = vse.filter(z => z.typ === 'vecerni' && z.poradi != null && kategorieBloku(z) && z.chvile_od >= U.tedS(od));
+  if (bloky.length < 8) return { malo: true, vety: [] };
+  const celkem = { prijemny: 0, neprijemny: 0 };
+  for (const b of bloky) { const k = kategorieBloku(b); if (k in celkem) celkem[k]++; }
+  const podil = k => celkem[k] / bloky.length;
+  const kandidati = [];
+  const projdi = (klic, popis) => {
+    const mapa = new Map();
+    for (const b of bloky) for (const x of (b[klic] || [])) {
+      if (!mapa.has(x)) mapa.set(x, []);
+      mapa.get(x).push(kategorieBloku(b));
+    }
+    for (const [x, kat] of mapa) {
+      if (kat.length < 3) continue;
+      for (const k of ['prijemny', 'neprijemny']) {
+        const p = kat.filter(c => c === k).length / kat.length;
+        const rozdil = p - podil(k);
+        if (rozdil >= .25 && p >= .5) kandidati.push({ rozdil, pocet: kat.length, veta: (k === 'prijemny' ? 'příjemná' : 'nepříjemná') + ' chvíle a ' + popis(x) });
+      }
+    }
+  };
+  projdi('cinnost', x => '„' + x + '“');
+  projdi('s_kym', x => 'společnost „' + x + '“');
+  kandidati.sort((a, b) => b.rozdil - a.rozdil);
+  return { malo: false, vety: kandidati.slice(0, 3).map(k => 'Ve Tvých záznamech za poslední 4 týdny se spolu častěji objevuje ' + k.veta + '.') };
+}
+
+function nejcastejsi(polozky, n = 8) {
+  const m = new Map();
+  for (const x of polozky) m.set(x, (m.get(x) || 0) + 1);
+  return [...m].sort((a, b) => b[1] - a[1]).slice(0, n);
+}
+
+async function obrazovkaPrehled() {
+  const vse = await U.vsechnyZaznamy();
+  const tydny = (await U.vsechnyTydny()).filter(t => t.vyplneno);
+  const dnes = U.datumDne();
+
+  // --- kalendář měsíce ---
+  const prvni = new Date(); prvni.setHours(12, 0, 0, 0); prvni.setDate(1); prvni.setMonth(prvni.getMonth() + prehled.mesic);
+  const nazevMesice = new Intl.DateTimeFormat('cs-CZ', { month: 'long', year: 'numeric' }).format(prvni);
+  const start = pondeliTydne(prvni);
+  const poctyDnu = new Map();
+  for (const z of vse) { const d = z.chvile_od.slice(0, 10); poctyDnu.set(d, (poctyDnu.get(d) || 0) + 1); }
+  let kal = ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne'].map(x => '<span class="kal-hlava">' + x + '</span>').join('');
+  for (let d = new Date(start); ; d.setDate(d.getDate() + 1)) {
+    if (d.getMonth() !== prvni.getMonth() && d > prvni && d.getDay() === 1) break;
+    const datum = U.datumDne(d);
+    if (d.getMonth() !== prvni.getMonth()) { kal += '<span></span>'; continue; }
+    const den = await U.nactiDen(datum);
+    const barva = nastaveni.barva_dne_zapnuta && den && den.barva;
+    const pocet = poctyDnu.get(datum) || 0;
+    const budouci = datum > dnes;
+    let styl = barva ? 'background:' + barva + ';color:' + inkoustPro(barva) + ';border-color:' + barva : pocet ? 'background:var(--jemna-zelena)' : '';
+    kal += budouci
+      ? '<span class="kal-den budouci">' + d.getDate() + '</span>'
+      : '<button type="button" class="kal-den' + (datum === dnes ? ' dnes' : '') + (prehled.den === datum ? ' vybrany' : '') + '" data-akce="prehledDen" data-datum="' + datum +
+        '" style="' + styl + '" aria-label="' + d.getDate() + '. ' + (d.getMonth() + 1) + '.: ' + pocet + ' záznamů">' + d.getDate() + '</button>';
+  }
+
+  // --- vybraný den ---
+  let kartaDne = '';
+  if (prehled.den) {
+    const datum = prehled.den, d = new Date(datum + 'T12:00:00');
+    const den = await U.nactiDen(datum);
+    const barva = nastaveni.barva_dne_zapnuta && den && den.barva;
+    const zaz = vse.filter(z => z.chvile_od.slice(0, 10) === datum);
+    const bloky = zaz.filter(z => z.typ === 'vecerni' && z.poradi != null);
+    const emoce = nejcastejsi(zaz.flatMap(z => (z.emoce || []).map(e => e.slovo)), 6);
+    const slova = zaz.map(z => z.vlastni_slova).filter(Boolean);
+    const nazev = new Intl.DateTimeFormat('cs-CZ', { weekday: 'long', day: 'numeric', month: 'long' }).format(d);
+    const ink = barva ? inkoustPro(barva) : null;
+    const kat = nejcastejsi(bloky.map(kategorieBloku).filter(Boolean), 1)[0];
+    const nazvyKat = { prijemny: 'příjemná', neutralni: 'ani tak, ani tak', neprijemny: 'nepříjemná' };
+    const casti = [];
+    if (bloky.length) casti.push('Večerní ohlédnutí · ' + bloky.length + ' ' + (bloky.length === 1 ? 'chvíle' : bloky.length < 5 ? 'chvíle' : 'chvil') + (kat ? ' · nejčastěji „' + nazvyKat[kat[0]] + '“' : ''));
+    const okamzite = zaz.filter(z => z.typ === 'okamzity').length;
+    if (okamzite) casti.push('Okamžité záznamy: ' + okamzite);
+    if (zaz.some(z => z.typ === 'oslava')) casti.push('Oslava dne');
+    kartaDne = '<section class="karta karta-dne"' + (barva ? ' style="background:' + barva + ';color:' + ink + ';border-color:' + barva + '"' : '') + '>' +
+      '<h2>' + h(nazev.charAt(0).toUpperCase() + nazev.slice(1)) + '</h2>' +
+      (casti.length ? '<p>' + casti.map(h).join('<br>') + '</p>' : '<p>Z tohoto dne nemáš žádné záznamy.</p>') +
+      (emoce.length ? '<div class="cipy">' + emoce.map(([e, n]) => '<span class="cip staticky"' + (ink ? ' style="color:' + ink + ';border-color:' + ink + '"' : '') + '>' + h(e) + (n > 1 ? ' ' + n : '') + '</span>').join('') + '</div>' : '') +
+      (slova.length ? '<p class="male">„' + h(slova[0].length > 140 ? slova[0].slice(0, 140) + '…' : slova[0]) + '“' + (slova.length > 1 ? ' <span>(+' + (slova.length - 1) + ')</span>' : '') + '</p>' : '') +
+      '<div class="odkazy"><a class="tlacitko obrys male-t" href="' + (den && den.vecerni_hotovo ? '#/vecer/' : '#/den/') + datum + '"' + (ink ? ' style="color:' + ink + ';border-color:' + ink + '"' : '') + '>Otevřít den</a></div>' +
+      '</section>';
+  }
+
+  // --- průběh týdnů (posledních 8) ---
+  const kat3 = [['prijemny', KATEGORIE.prijemna.barva], ['neutralni', KATEGORIE.neutralni.barva], ['neprijemny', KATEGORIE.neprijemna.barva]];
+  let radkyTydnu = '', maTydny = false;
+  for (let i = 0; i < 8; i++) {
+    const kod = predchoziTyden(kodTydne(new Date()), i);
+    const dt = datTydne(kod, vse);
+    const ulozeny = tydny.find(t => t.tyden === kod);
+    if (!dt.podily && !ulozeny) continue;
+    maTydny = true;
+    const r = rozsahTydne(kod);
+    const pruh = dt.podily
+      ? '<div class="pruh-dne maly">' + kat3.filter(([k]) => dt.podily[k]).map(([k, b]) => '<span class="segment" style="flex:' + dt.podily[k] + ';background:' + b + '"></span>').join('') + '</div>'
+      : '<div class="tlumene male">bez ohodnocených chvil</div>';
+    const obsah = '<span class="tyden-popis">' + (i === 0 ? 'tento týden' : h(r.text)) + (ulozeny && ulozeny.barva ? ' <i class="tecka" style="background:' + ulozeny.barva + '"></i>' : '') + '</span>' + pruh +
+      (dt.podily ? '<span class="tlumene male">' + dt.podily.prijemny + ' % příjemný</span>' : '');
+    radkyTydnu += ulozeny ? '<a class="tyden-radek" href="#/tyden/' + kod + '">' + obsah + '</a>' : '<div class="tyden-radek">' + obsah + '</div>';
+  }
+
+  // --- WHO-5 ---
+  const who = tydny.filter(t => t.who5).sort((a, b) => a.tyden.localeCompare(b.tyden)).slice(-10);
+  const who5 = who.length
+    ? '<section class="karta"><h2>Dotazník pohody WHO-5</h2><div class="who5-graf">' +
+      who.map(t => '<a class="who5-sloupec" href="#/tyden/' + t.tyden + '" aria-label="' + h(rozsahTydne(t.tyden).text) + ': ' + t.who5.index + ' ze 100"><span class="who5-hodnota">' + t.who5.index + '</span>' +
+        '<span class="who5-sloupek" style="height:' + Math.max(4, t.who5.index) + '%"></span><span class="tlumene male">' + pondeliZKodu(t.tyden).getDate() + '. ' + (pondeliZKodu(t.tyden).getMonth() + 1) + '.</span></a>').join('') +
+      '</div><p class="tlumene male">Index pohody od 0 do 100. Každý sloupec je jedno vyplnění.</p></section>'
+    : '';
+
+  // --- nejčastější slova za 30 dní ---
+  const od30 = new Date(); od30.setDate(od30.getDate() - 30);
+  const posledni = vse.filter(z => z.chvile_od >= U.tedS(od30));
+  const emoce = nejcastejsi(posledni.flatMap(z => (z.emoce || []).map(e => e.slovo)));
+  const telo = nejcastejsi(posledni.flatMap(z => (z.telo || []).map(t => t.pocit)));
+  const potrebyMapa = new Map();
+  for (const z of posledni) for (const p of (z.potreby || [])) {
+    if (!potrebyMapa.has(p.potreba)) potrebyMapa.set(p.potreba, []);
+    if (p.naplneni != null) potrebyMapa.get(p.potreba).push(p.naplneni);
+  }
+  const potreby = [...potrebyMapa].sort((a, b) => b[1].length - a[1].length).slice(0, 8);
+  const cipy = seznam => '<div class="cipy">' + seznam.map(([x, n]) => '<span class="cip staticky">' + h(x) + ' <span class="tlumene">' + n + '×</span></span>').join('') + '</div>';
+  const vrstvy = (emoce.length || telo.length || potreby.length)
+    ? '<section class="karta"><h2>Posledních 30 dní</h2>' +
+      (emoce.length ? '<span class="panel-nadpis">Nejčastější emoce</span>' + cipy(emoce) : '') +
+      (telo.length ? '<span class="panel-nadpis">Nejčastěji v těle</span>' + cipy(telo) : '') +
+      (potreby.length ? '<span class="panel-nadpis">Potřeby – jak bývají naplněné (průměr)</span><div class="sklenicky-prehled">' +
+        potreby.map(([p, hodnoty]) => {
+          const prumer = hodnoty.length ? hodnoty.reduce((a, b) => a + b, 0) / hodnoty.length : null;
+          return '<div class="sklenicka-polozka">' + sklenicka(prumer == null ? null : Math.round(prumer * 2) / 2) + '<span>' + h(p) + '</span><span class="tlumene male">' + (hodnoty.length || potrebyMapa.get(p).length) + '×</span></div>';
+        }).join('') + '</div>' : '') +
+      '</section>'
+    : '';
+
+  const sv = souvislosti(vse);
+  const souvis = '<section class="karta jemna"><h2>Souvislosti</h2>' +
+    (sv.vety.length ? sv.vety.map(v => '<p>' + h(v) + '</p>').join('') + '<p class="tlumene male">Je to souvislost, ne příčina. Co z toho platí, víš nejlíp Ty.</p>'
+      : '<p class="tlumene">' + (sv.malo ? 'Souvislosti se ukážou, až bude ve večerních ohlédnutích za poslední 4 týdny aspoň 8 ohodnocených chvil.' : 'Zatím se v Tvých záznamech nic výrazně neopakuje spolu.') + '</p>') +
+    '</section>';
+
+  return '<header class="hlavicka"><h1>Můj přehled</h1></header>' +
+    '<main class="obsah">' +
+      '<section class="karta"><div class="karta-radek prehled-tydnu">' +
+        '<button type="button" class="ikona-tlacitko bez-okraje" data-akce="prehledMesic" data-smer="-1" aria-label="Předchozí měsíc">‹</button>' +
+        '<h2>' + h(nazevMesice.charAt(0).toUpperCase() + nazevMesice.slice(1)) + '</h2>' +
+        '<button type="button" class="ikona-tlacitko bez-okraje" data-akce="prehledMesic" data-smer="1" aria-label="Další měsíc"' + (prehled.mesic >= 0 ? ' disabled' : '') + '>›</button>' +
+        '</div><div class="kalendar" data-mesic-swipe="1">' + kal + '</div>' +
+        '<p class="tlumene male">Klepnutím na den uvidíš jeho shrnutí.</p></section>' +
+      kartaDne +
+      '<section class="karta"><h2>Průběh týdnů</h2>' +
+        (maTydny ? '<div class="tydny-prehled">' + radkyTydnu + '</div><div class="legenda">' +
+          '<span class="legenda-polozka"><i class="legenda-znak" style="background:' + KATEGORIE.prijemna.barva + '"></i>příjemný</span>' +
+          '<span class="legenda-polozka"><i class="legenda-znak" style="background:' + KATEGORIE.neutralni.barva + '"></i>ani tak, ani tak</span>' +
+          '<span class="legenda-polozka"><i class="legenda-znak" style="background:' + KATEGORIE.neprijemna.barva + '"></i>nepříjemný</span></div>' +
+          '<p class="tlumene male">Podíly času z ohodnocených chvil večerního ohlédnutí. Týdny s ohlédnutím jdou otevřít.</p>'
+          : '<p class="tlumene">Tady se ukáže, jak se Ti čas v jednotlivých týdnech rozděloval, až začneš ohodnocovat chvíle ve večerním ohlédnutí.</p>') +
+      '</section>' +
+      who5 + vrstvy + souvis +
+      '<p class="tlumene male">Všechno se počítá jen v tomto telefonu.</p>' +
+    '</main>' + navigace('prehled');
 }
 
 // ---------------- POMOC ----------------
@@ -2609,6 +2801,8 @@ const AKCE = {
     prekresli();
   },
   // ---- Oslava ----
+  prehledMesic(d) { prehled.mesic = Math.min(0, prehled.mesic + (+d.smer)); prehled.den = null; prekresli(); },
+  prehledDen(d) { prehled.den = prehled.den === d.datum ? null : d.datum; prekresli(); },
   tydenPosun(d) { posunTydne = Math.min(0, posunTydne + (+d.smer)); prekresli(); },
   tydenBarva(d) { tyden.barva = tyden.barva === d.barva ? null : d.barva; prekresli(); },
   who5(d) { const i = +d.i, b = +d.body; tyden.who5[i] = tyden.who5[i] === b ? null : b; prekresli(); },
@@ -2626,7 +2820,7 @@ const AKCE = {
       vytvoreno: t.ulozeny && t.ulozeny.vytvoreno ? t.ulozeny.vytvoreno : U.tedS(), upraveno: t.ulozeny && t.ulozeny.vyplneno ? U.tedS() : null,
       vyplneno: true,
       podily: t.data.podily, minuty: t.data.minuty, pocet_zaznamu: t.data.pocet,
-      barva: t.barva, pomohlo: t.pomohlo.trim(), nevyreseno: t.nevyreseno.trim(), prekvapilo: t.prekvapilo.trim(),
+      barva: t.barva, vzpominka: t.vzpominka.trim(), tema: t.tema.trim(), dal: t.dal.trim(),
       who5: skor ? { odpovedi: [...t.who5], hruby: skor.hruby, index: skor.index, nizky: skor.nizky } : null,
       verze_aplikace: U.VERZE_APLIKACE
     });
@@ -2806,8 +3000,8 @@ const AKCE = {
     if (b.vyzkum[d.klic] === x) delete b.vyzkum[d.klic]; else b.vyzkum[d.klic] = x;
     prekresli();
   },
-  blokHodnotit(d) { vecer.bloky[+d.index].hodnotit = true; prekresli(); },
-  blokNehodnotit(d) { vecer.bloky[+d.index].hodnotit = false; prekresli(); },
+  blokHodnotit(d) { const b = vecer.bloky[+d.index]; b.hodnotit = true; b.vynechano = false; prekresli(); },
+  blokNehodnotit(d) { const b = vecer.bloky[+d.index]; b.hodnotit = false; b.vynechano = true; prekresli(); },
   async vecerUlozit() {
     if (diktovani) diktovani.stop();
     await ulozVecer();
@@ -3157,6 +3351,7 @@ async function vykresli() {
     case 'vecer':      html = await obrazovkaVecer(parametr); break;
     case 'oslava':     html = obrazovkaOslava(); break;
     case 'prosba':     html = obrazovkaProsba(); break;
+    case 'prehled':    html = await obrazovkaPrehled(); break;
     case 'tyden':
       if (!tyden || tyden.kod !== (parametr || tydenKOhlednuti())) await pripravTyden(parametr || tydenKOhlednuti());
       html = obrazovkaTyden(); break;
@@ -3319,14 +3514,20 @@ function obnovNahledProsby() {
 // Přehled týdnů jde posouvat i přejetím prstem (doprava = do minulosti).
 let tydenDotyk = null;
 app.addEventListener('touchstart', e => {
-  const t = e.target.closest('[data-tyden-swipe]');
-  tydenDotyk = t ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null;
+  const t = e.target.closest('[data-tyden-swipe], [data-mesic-swipe]');
+  tydenDotyk = t ? { x: e.touches[0].clientX, y: e.touches[0].clientY, mesic: !!t.dataset.mesicSwipe } : null;
 }, { passive: true });
 app.addEventListener('touchend', e => {
   if (!tydenDotyk) return;
   const dx = e.changedTouches[0].clientX - tydenDotyk.x, dy = e.changedTouches[0].clientY - tydenDotyk.y;
+  const mesic = tydenDotyk.mesic;
   tydenDotyk = null;
   if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+  if (mesic) {
+    const m = Math.min(0, prehled.mesic + (dx > 0 ? -1 : 1));
+    if (m !== prehled.mesic) { prehled.mesic = m; prehled.den = null; prekresli(); }
+    return;
+  }
   const novy = Math.min(0, posunTydne + (dx > 0 ? -1 : 1));
   if (novy !== posunTydne) { posunTydne = novy; prekresli(); }
 });
