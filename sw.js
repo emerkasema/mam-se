@@ -6,7 +6,7 @@
 // Telefony tak poznají, že si mají stáhnout novou verzi.
 // =====================================================================
 
-const VERZE = 'mamse-v0.6.0';
+const VERZE = 'mamse-v0.6.1';
 
 const SOUBORY = [
   './',

@@ -351,17 +351,26 @@ function radekSeznamu(polozka) {
 }
 
 // ---------------- DOMOV ----------------
+function nazevTydne(pondeli) {
+  if (posunTydne === 0) return 'Tento týden';
+  if (posunTydne === -1) return 'Minulý týden';
+  const ne = new Date(pondeli); ne.setDate(pondeli.getDate() + 6);
+  return pondeli.getDate() + '. ' + (pondeli.getMonth() + 1) + '. – ' + ne.getDate() + '. ' + (ne.getMonth() + 1) + '.';
+}
+
 async function obrazovkaDomov() {
   const vse = (await U.vsechnyZaznamy()).sort((a, b) => (b.upraveno || b.vytvoreno).localeCompare(a.upraveno || a.vytvoreno));
 
-  const dnesDen = await U.nactiDen(denOhlednuti());
+  const denVecera = await denKOhlednuti();
+  const jeVcera = denVecera !== denOhlednuti();
+  const dnesDen = await U.nactiDen(denVecera);
   const dnesVecer = !!(dnesDen && dnesDen.vecerni_hotovo);
 
   // Tento týden (pondělí až neděle)
   const dnes = new Date();
   const pondeli = new Date(dnes);
   pondeli.setHours(0, 0, 0, 0);
-  pondeli.setDate(dnes.getDate() - ((dnes.getDay() + 6) % 7));
+  pondeli.setDate(dnes.getDate() - ((dnes.getDay() + 6) % 7) + 7 * posunTydne);
   const zkratky = ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne'];
   let tydenHtml = '';
   for (let i = 0; i < 7; i++) {
@@ -413,11 +422,15 @@ async function obrazovkaDomov() {
     '</a>' + rozepsano +
     '<a class="tlacitko-pomoc" href="#/pomoc">' + IKONA.srdce + 'Potřebuju pomoc</a>' +
     '<section class="karta"><div class="karta-radek"><h2>Večerní ohlédnutí</h2><span class="tlumene">v ' + h(nastaveni.pripominka_cas) + '</span></div>' +
-      '<p class="tlumene">' + (dnesVecer ? 'Dnešní ohlédnutí je hotové. Můžeš ho kdykoli doplnit.' : 'Jaký byl Tvůj den?') + '</p>' +
+      '<p class="tlumene">' + (jeVcera ? 'Jaký byl včerejší den? Ohlédnutí ještě není hotové.' : dnesVecer ? 'Dnešní ohlédnutí je hotové. Můžeš ho kdykoli doplnit.' : 'Jaký byl Tvůj den?') + '</p>' +
       '<a class="tlacitko jemne" style="align-self:flex-start" href="#/vecer">' + (dnesVecer ? 'Upravit ohlédnutí' : 'Začít ohlédnutí') + '</a></section>' +
     kartaTydne +
-    '<section class="karta"><div class="karta-radek"><h2>Tento týden</h2></div><div class="tyden">' + tydenHtml + '</div>' +
-      '<p class="tlumene male">Číslo v kolečku je počet záznamů. Klepnutím na den otevřeš jeho ohlédnutí' + (nastaveni.barva_dne_zapnuta ? ', u dne bez ohlédnutí zvolíš barvu.' : '.') + '</p></section>' +
+    '<section class="karta"><div class="karta-radek prehled-tydnu">' +
+      '<button type="button" class="ikona-tlacitko bez-okraje" data-akce="tydenPosun" data-smer="-1" aria-label="Předchozí týden">‹</button>' +
+      '<h2>' + nazevTydne(pondeli) + '</h2>' +
+      '<button type="button" class="ikona-tlacitko bez-okraje" data-akce="tydenPosun" data-smer="1" aria-label="Další týden"' + (posunTydne >= 0 ? ' disabled' : '') + '>›</button>' +
+    '</div><div class="tyden" data-tyden-swipe="1">' + tydenHtml + '</div>' +
+      '<p class="tlumene male">Šipkami nebo přejetím prstem se dostaneš do starších týdnů. Číslo v kolečku je počet záznamů. Klepnutím na den otevřeš jeho ohlédnutí' + (nastaveni.barva_dne_zapnuta ? ', u dne bez ohlédnutí zvolíš barvu.' : '.') + '</p></section>' +
     (seznam ? '<section class="seznam" aria-label="Poslední záznamy"><h2>Poslední záznamy</h2>' + seznam + '</section>' : '') +
     '</main>' + navigace('domov');
 }
@@ -849,6 +862,21 @@ function denOhlednuti() {
   return U.datumDne(d);
 }
 
+// Který den otevřít pod „Večerní ohlédnutí“: dopoledne (do 13 h) včerejšek,
+// pokud ho člověk ještě nedokončil – ten už měl být vyplněný. Jinak dnešek.
+// Netýká se úplně nových uživatelů (nic staršího než dnešek v aplikaci nemají).
+async function denKOhlednuti() {
+  const dnes = denOhlednuti();
+  const ted = new Date();
+  if (ted.getHours() < 4 || ted.getHours() >= 13) return dnes;
+  const v = new Date(dnes + 'T12:00:00'); v.setDate(v.getDate() - 1);
+  const vcera = U.datumDne(v);
+  const den = await U.nactiDen(vcera);
+  if (den && den.vecerni_hotovo) return dnes;
+  const pouzivaUz = (await U.vsechnyZaznamy()).some(z => z.chvile_od.slice(0, 10) <= vcera);
+  return pouzivaUz ? vcera : dnes;
+}
+
 function novyBlok() {
   return { id: U.noveId(), vytvoreno: U.tedS(), popis: '', cinnost: [], delkaMin: null, sKym: [], kde: null,
     hodnotit: false, prijemnost: null, text: '', smysluplnost: null, vyzkum: {}, ulozeny: false };
@@ -1007,7 +1035,7 @@ function nazevDneVecera() {
 }
 
 async function obrazovkaVecer(parametr) {
-  const datum = /^\d{4}-\d{2}-\d{2}$/.test(parametr || '') ? parametr : denOhlednuti();
+  const datum = /^\d{4}-\d{2}-\d{2}$/.test(parametr || '') ? parametr : await denKOhlednuti();
   await pripravVecer(datum);
   const v = vecer;
 
@@ -1066,7 +1094,7 @@ async function obrazovkaVecer(parametr) {
       '</main>' +
       '<footer class="spodni-lista tri">' +
         '<button type="button" class="tlacitko obrys" data-akce="vecerOdlozit">Odložit</button>' +
-        '<button type="button" class="tlacitko obrys" data-akce="vecerUlozitRozvrh"' + (v.bloky.length ? '' : ' disabled') + '>Uložit</button>' +
+        '<button type="button" class="tlacitko obrys" data-akce="vecerUlozitRozvrh"' + (v.bloky.length || v.upravovany !== null ? '' : ' disabled') + '>Uložit</button>' +
         '<button type="button" class="tlacitko" data-akce="vecerDal"' + (v.bloky.length ? '' : ' disabled') + '>Dál</button>' +
       '</footer>';
   }
@@ -1225,6 +1253,7 @@ function textSdileni(v, okamzite, hodiny, cas, celkem, hodnocene, oslavy = []) {
   }
   for (const o of oslavy) {
     if (o.vlastni_slova) radky.push('Dnes oslavuji: ' + o.vlastni_slova);
+    if (o.potreby && o.potreby.length) radky.push('Naplněné potřeby: ' + o.potreby.map(p => p.potreba).join(', '));
     if (o.podekovani) radky.push('Děkuji: ' + o.podekovani);
   }
   return radky.join('\n');
@@ -1298,6 +1327,35 @@ function zaoblenyObdelnik(ctx, x, y, w, h, r) {
   ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
 }
 
+// Skleničky potřeb na obrázku (stejný tvar jako v aplikaci, viz sklenicka()).
+const SKL_W = 46, SKL_H = 58, SKL_RADEK = 74;
+function rozvrhniSklenicky(ctx, potreby, sirka, font) {
+  ctx.font = font;
+  const polozky = []; let x = 0, radek = 0;
+  for (const p of potreby) {
+    const w = SKL_W + 12 + ctx.measureText(p.potreba).width + 30;
+    if (x > 0 && x + w > sirka) { radek++; x = 0; }
+    polozky.push({ potreba: p.potreba, naplneni: p.naplneni, x, radek }); x += w;
+  }
+  return { polozky, radku: polozky.length ? radek + 1 : 0, font };
+}
+function nakresliSklenicky(ctx, rozvrh, x0, y0, barvaTextu) {
+  const k = SKL_W / 44;
+  for (const p of rozvrh.polozky) {
+    const x = x0 + p.x, y = y0 + p.radek * SKL_RADEK;
+    const obrys = () => { ctx.beginPath(); ctx.moveTo(x + 8 * k, y + 6 * k); ctx.lineTo(x + 36 * k, y + 6 * k); ctx.lineTo(x + 32 * k, y + 52 * k); ctx.lineTo(x + 12 * k, y + 52 * k); ctx.closePath(); };
+    const hladina = p.naplneni == null ? 0 : (p.naplneni / 4) * 46 * k;
+    ctx.save(); obrys(); ctx.clip();
+    ctx.fillStyle = '#FFFDF9'; ctx.fillRect(x, y, SKL_W, SKL_H);
+    ctx.fillStyle = '#E6B173'; ctx.fillRect(x, y + 52 * k - hladina, SKL_W, hladina);
+    ctx.restore();
+    obrys(); ctx.strokeStyle = '#246B56'; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.stroke();
+    ctx.font = rozvrh.font; ctx.fillStyle = barvaTextu || '#1F2A26'; ctx.textBaseline = 'middle';
+    ctx.fillText(p.potreba, x + SKL_W + 12, y + SKL_H / 2);
+    ctx.textBaseline = 'top';
+  }
+}
+
 async function nakresliSnimekDne(d) {
   const W = 1080, P = 64, SIRKA = W - 2 * P;
   const platno = document.createElement('canvas');
@@ -1324,9 +1382,16 @@ async function nakresliSnimekDne(d) {
   const radkyChvil = chvile.flatMap(t => zalomText(ctx, '• ' + t, SIRKA - 64));
   const radkyOkamzitych = okamzite.flatMap(o => zalomText(ctx, '• ' + o.text, SIRKA));
   ctx.font = '500 34px ' + serif;
-  const radkyOslav = (d.oslavy || []).flatMap(o => [
-    ...(o.vlastni_slova ? zalomText(ctx, 'Dnes oslavuji: ' + o.vlastni_slova, SIRKA - 64) : []),
-    ...(o.podekovani ? zalomText(ctx, 'Děkuji: ' + o.podekovani, SIRKA - 64) : [])]);
+  // Každá oslava: co oslavuji, skleničky naplněných potřeb (zásada oslavy v NVC), komu děkuji.
+  const oslavyKresba = (d.oslavy || []).map(o => {
+    ctx.font = '500 34px ' + serif;
+    const text = o.vlastni_slova ? zalomText(ctx, 'Dnes oslavuji: ' + o.vlastni_slova, SIRKA - 64) : [];
+    const dik = o.podekovani ? zalomText(ctx, 'Děkuji: ' + o.podekovani, SIRKA - 64) : [];
+    const skl = rozvrhniSklenicky(ctx, o.potreby || [], SIRKA - 64, '400 30px ' + sans);
+    const vyska = text.length * 46 + (skl.radku ? 10 + skl.radku * SKL_RADEK : 0) + dik.length * 46;
+    return { text, dik, skl, vyska };
+  }).filter(o => o.vyska);
+  const vyskaOslav = oslavyKresba.length ? 40 + oslavyKresba.reduce((a, o) => a + o.vyska, 0) + (oslavyKresba.length - 1) * 30 + 40 : 0;
   ctx.font = '400 34px ' + sans;
   const poradiKat = Object.keys(KATEGORIE);
   const katB = b => kategorie(b.hodnotit ? b.prijemnost : null);
@@ -1349,7 +1414,7 @@ async function nakresliSnimekDne(d) {
   ctx.font = '400 34px ' + sans;
   let H = P + 70 + 16 + 72 + 50 + 30;                        // hlavička: Mám se!, Snímek dne, datum
   H += 48 + radkySouhrnu.length * 48 + (radkyChvil.length ? 16 + radkyChvil.length * 46 : 0) + 48 + 32; // karta dne
-  if (radkyOslav.length) H += 40 + radkyOslav.length * 46 + 40 + 32;
+  if (vyskaOslav) H += vyskaOslav + 32;
   if (sBloky.length) H += 50 + 56 + 24 + 60 + 32;           // průběh dne
   if (okamzite.length) H += 50 + 50 + 50 + radkyOkamzitych.length * 46 + 32;
   if (fotky.length) H += radkuFotek * (VYSKA_FOTKY + MEZERA) + 32;
@@ -1386,16 +1451,21 @@ async function nakresliSnimekDne(d) {
   y += vyskaKarty + 32;
 
   // Oslava (jen když ji člověk zaškrtl)
-  if (radkyOslav.length) {
-    const vyska = 40 + radkyOslav.length * 46 + 40;
-    zaoblenyObdelnik(ctx, P, y, SIRKA, vyska, 36);
+  if (vyskaOslav) {
+    zaoblenyObdelnik(ctx, P, y, SIRKA, vyskaOslav, 36);
     ctx.fillStyle = '#FDF3DC'; ctx.fill();
     ctx.strokeStyle = '#F5BE4B'; ctx.lineWidth = 3; ctx.stroke();
-    ctx.fillStyle = '#1F2A26'; ctx.font = '500 34px ' + serif;
     let yo = y + 40;
-    for (const r of radkyOslav) { ctx.fillText(r, P + 32, yo); yo += 46; }
+    oslavyKresba.forEach((o, i) => {
+      if (i) yo += 30;
+      ctx.fillStyle = '#1F2A26'; ctx.font = '500 34px ' + serif;
+      for (const r of o.text) { ctx.fillText(r, P + 32, yo); yo += 46; }
+      if (o.skl.radku) { yo += 10; nakresliSklenicky(ctx, o.skl, P + 32, yo); yo += o.skl.radku * SKL_RADEK; }
+      ctx.fillStyle = '#1F2A26'; ctx.font = '500 34px ' + serif;
+      for (const r of o.dik) { ctx.fillText(r, P + 32, yo); yo += 46; }
+    });
     ctx.font = '400 34px ' + sans;
-    y += vyska + 32;
+    y += vyskaOslav + 32;
   }
 
   // Průběh dne
@@ -1589,6 +1659,7 @@ function nahledyFotek(zaznamy) {
 // animaci podle skupiny nejplnější vybrané potřeby (viz js/oslava.js).
 
 let oslava = null;
+let posunTydne = 0;  // přehled týdnů na Domově: 0 = tento týden, -1 = minulý…
 let prosba = null;  // rozepsaná prosba (jen v paměti)
 let sdileniOslavy = null; // sdílení jedné oslavy (obrázek s textem)
 let posledniOslava = null; // naposledy uložená oslava – aby šla hned sdílet
@@ -1698,7 +1769,7 @@ async function ulozOslavu() {
 // Obrázek „Dnes oslavuji“ v barvě dne s konfetami. Odejde jen to, co je v náhledu.
 
 function noveSdileniOslavy(z, zpet) {
-  return { z, zpet, dik: !!z.podekovani, potreby: false, format: 'prispevek', komentar: '', obrazek: null, klic: null, pripravuji: false };
+  return { z, zpet, dik: !!z.podekovani, potreby: true, format: 'prispevek', komentar: '', obrazek: null, klic: null, pripravuji: false };
 }
 
 async function nakresliOslavu(so, barvaDne) {
@@ -1716,13 +1787,12 @@ async function nakresliOslavu(so, barvaDne) {
   const radkyTextu = zalomText(ctx, z.vlastni_slova || 'Něco, co stojí za oslavu.', SIRKA - 2 * 64);
   ctx.font = '500 38px ' + serif;
   const radkyDiku = so.dik && z.podekovani ? zalomText(ctx, 'Děkuji: ' + z.podekovani, SIRKA) : [];
-  ctx.font = '400 32px ' + sans;
-  const radkyPotreb = so.potreby && z.potreby.length ? zalomText(ctx, 'Naplněné potřeby: ' + z.potreby.map(p => p.potreba).join(', '), SIRKA) : [];
+  const skl = so.potreby && z.potreby.length ? rozvrhniSklenicky(ctx, z.potreby, SIRKA, '400 32px ' + sans) : { radku: 0, polozky: [] };
 
   const vyskaKarty = 72 + radkyTextu.length * 72 + 56;
   let H = P + 70 + 60 + 80 + 50 + 50 + vyskaKarty + 40;
   if (radkyDiku.length) H += radkyDiku.length * 52 + 24;
-  if (radkyPotreb.length) H += radkyPotreb.length * 44 + 24;
+  if (skl.radku) H += 44 + skl.radku * SKL_RADEK + 24;
   H += 60 + P;
   H = Math.max(H, 1080);
   platno.width = W; platno.height = H;
@@ -1732,10 +1802,10 @@ async function nakresliOslavu(so, barvaDne) {
   let semeno = [...z.id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
   const nahodne = () => { semeno = (semeno * 1664525 + 1013904223) >>> 0; return semeno / 4294967296; };
   const barvyKonfet = [barva, '#246B56', '#E6B173', '#72B97F', '#F5BE4B', '#C9706B', '#4F7CA8', barva];
-  for (let i = 0; i < 70; i++) {
+  for (let i = 0; i < 160; i++) {
     const x = nahodne() * W, yk = nahodne() * H;
     // nechat volné místo pro text uprostřed
-    if (x > P - 10 && x < W - P + 10 && yk > P + 120 && yk < H - P - 90) { if (nahodne() < .85) continue; }
+    if (x > P - 20 && x < W - P + 20 && yk > P + 110) continue;   // konfety jen po okrajích, ne přes text
     if (x < P + 340 && yk < P + 90) continue;          // ani přes logo a název
     ctx.save(); ctx.translate(x, yk); ctx.rotate(nahodne() * Math.PI);
     ctx.fillStyle = barvyKonfet[i % barvyKonfet.length];
@@ -1762,14 +1832,15 @@ async function nakresliOslavu(so, barvaDne) {
   for (const r of radkyTextu) { ctx.fillText(r, W / 2, yt); yt += 72; }
   ctx.textAlign = 'left';
   y += vyskaKarty + 40;
+  if (skl.radku) {
+    ctx.fillStyle = '#3E6B5A'; ctx.font = '400 30px ' + sans;
+    ctx.fillText('Naplněné potřeby:', P, y); y += 44;
+    nakresliSklenicky(ctx, skl, P, y); y += skl.radku * SKL_RADEK + 24;
+  }
   if (radkyDiku.length) {
     ctx.fillStyle = '#1F2A26'; ctx.font = '500 38px ' + serif;
     for (const r of radkyDiku) { ctx.fillText(r, P, y); y += 52; }
     y += 24;
-  }
-  if (radkyPotreb.length) {
-    ctx.fillStyle = '#3E6B5A'; ctx.font = '400 32px ' + sans;
-    for (const r of radkyPotreb) { ctx.fillText(r, P, y); y += 44; }
   }
   ctx.font = '400 26px ' + sans; ctx.fillStyle = '#5E6B65';
   ctx.fillText('Z aplikace Mám se! od Emer · mimonadovna.cz', P, H - P - 30);
@@ -1797,8 +1868,8 @@ function textOslavy(so) {
   const z = so.z, r = [];
   if (so.komentar.trim()) r.push(so.komentar.trim());
   r.push('Dnes oslavuji: ' + (z.vlastni_slova || 'něco, co stojí za oslavu.'));
-  if (so.dik && z.podekovani) r.push('Děkuji: ' + z.podekovani);
   if (so.potreby && z.potreby.length) r.push('Naplněné potřeby: ' + z.potreby.map(p => p.potreba).join(', '));
+  if (so.dik && z.podekovani) r.push('Děkuji: ' + z.podekovani);
   return r.join('\n');
 }
 
@@ -2337,7 +2408,13 @@ function obrazovkaPomoc() {
           '<div class="odkazy"><a class="tlacitko male-t" href="https://play.google.com/store/apps/details?id=org.dontpanic" target="_blank" rel="noopener">Otevřít Nepanikař</a></div>') +
       '</section>' +
       '<section class="karta">' +
-        krok(3, 'Napsat místo volání',
+        krok(3, 'Zavolat',
+          '<div class="kontakt"><span class="nazev">Linka první psychické pomoci · 116 123</span><span class="tlumene male">zdarma, anonymně</span><div class="odkazy"><a class="tlacitko male-t" href="tel:116123">Zavolat 116 123</a></div></div>' +
+          '<div class="kontakt"><span class="nazev">Linka bezpečí · 116 111</span><span class="tlumene male">nonstop · děti a studenti do 26 let</span><div class="odkazy"><a class="tlacitko male-t" href="tel:116111">Zavolat 116 111</a></div></div>' +
+          '<div class="kontakt"><span class="nazev">Rodičovská linka · 606 021 021</span><span class="tlumene male">rodiče a pečující</span><div class="odkazy"><a class="tlacitko male-t" href="tel:606021021">Zavolat</a></div></div>') +
+      '</section>' +
+      '<section class="karta">' +
+        krok(4, 'Napsat místo volání',
           '<div class="kontakt"><span class="nazev">Linka první psychické pomoci – chat ' + stitek(chat.lppp) + '</span><span class="tlumene male">út–čt 13–18, pá–po a svátky 8–13 · pro dospělé</span>' +
             '<div class="odkazy"><a class="tlacitko male-t" href="https://linkapsychickepomoci.cz/chat/" target="_blank" rel="noopener">Otevřít chat</a></div></div>' +
           '<div class="kontakt"><span class="nazev">Poradna Nepanikař – chat ' + stitek(chat.nepanikar) + '</span><span class="tlumene male">po–pá 16–22 · hlavně pro mladé · e-mailem kdykoli, odpověď do 7 dní</span>' +
@@ -2349,19 +2426,16 @@ function obrazovkaPomoc() {
           '<p class="tlumene male">E-mail není na akutní ohrožení – tam pomůže funkce „Nemohu mluvit“ v aplikaci Záchranka (krok 5).</p>') +
       '</section>' +
       '<section class="karta">' +
-        krok(4, 'Zavolat',
-          '<div class="kontakt"><span class="nazev">Linka první psychické pomoci · 116 123</span><span class="tlumene male">zdarma, anonymně</span><div class="odkazy"><a class="tlacitko male-t" href="tel:116123">Zavolat 116 123</a></div></div>' +
-          '<div class="kontakt"><span class="nazev">Linka bezpečí · 116 111</span><span class="tlumene male">nonstop · děti a studenti do 26 let</span><div class="odkazy"><a class="tlacitko male-t" href="tel:116111">Zavolat 116 111</a></div></div>' +
-          '<div class="kontakt"><span class="nazev">Rodičovská linka · 606 021 021</span><span class="tlumene male">rodiče a pečující</span><div class="odkazy"><a class="tlacitko male-t" href="tel:606021021">Zavolat</a></div></div>') +
-      '</section>' +
-      '<section class="karta">' +
         krok(5, 'Ohrožení života nebo zdraví',
           '<p>Nejlepší je aplikace <b>Záchranka</b>: tlačítko SOS (zdravotní problém 155, jiná nouze 112) a operátor dostane Tvoji polohu. Když nemůžeš mluvit, použij v ní <b>„Nemohu mluvit“</b> – pošle SMS.</p>' +
           '<div class="odkazy"><a class="tlacitko male-t" href="https://play.google.com/store/search?q=Z%C3%A1chranka&c=apps" target="_blank" rel="noopener">Najít Záchranku</a>' +
           '<a class="tlacitko obrys male-t" href="tel:155">Volat 155</a><a class="tlacitko obrys male-t" href="tel:112">Volat 112</a></div>' +
           '<p class="tlumene male">Nebo požádej někoho blízkého, ať zavolá za Tebe.</p>') +
       '</section>' +
-      '<section class="karta"><h2>Mezi krizí a ničím</h2><p>Je dobrý nápad svěřit se praktickému lékaři. Nemusíš vyprávět všechno – stačí říct, jak dlouho a jak moc je Ti těžko. Praktik může doporučit psychologa, psychiatra nebo jinou pomoc. Na krizi se čekat nemusí.</p></section>' +
+      '<section class="karta">' +
+        krok(6, 'Na záchranku to není, ale samo to nepřejde.',
+          '<p>Je dobrý nápad svěřit se praktickému lékaři. Nemusíš vyprávět všechno – stačí říct, jak dlouho a jak moc je Ti těžko. Praktik může doporučit psychologa, psychiatra nebo jinou pomoc. Není dobré čekat, až Ti bude nejhůř.</p>') +
+      '</section>' +
       '<p class="tlumene male">Kontakty ověřeny 6. 11. 2026 na webech provozovatelů. Mám se! není zdravotnický prostředek a nenahrazuje odbornou pomoc.</p>' +
     '</main>';
 }
@@ -2535,6 +2609,7 @@ const AKCE = {
     prekresli();
   },
   // ---- Oslava ----
+  tydenPosun(d) { posunTydne = Math.min(0, posunTydne + (+d.smer)); prekresli(); },
   tydenBarva(d) { tyden.barva = tyden.barva === d.barva ? null : d.barva; prekresli(); },
   who5(d) { const i = +d.i, b = +d.body; tyden.who5[i] = tyden.who5[i] === b ? null : b; prekresli(); },
   who5Ukazat() { tyden.ukazatWho5 = true; prekresli(); },
@@ -2704,7 +2779,14 @@ const AKCE = {
     location.hash = '#/domov';
   },
   async vecerUlozitRozvrh() {
-    if (vecer.upravovany !== null) { oznam('Nejdřív dokonči rozepsaný blok.'); return; }
+    // „Uložit“ vezme i rozepsaný blok – funguje jako „Přidat do dne“ a hned uloží.
+    if (vecer.upravovany !== null) {
+      const b = vecer.rozpracovany;
+      const prazdny = vecer.upravovany === 'novy' && !b.cinnost.length && !b.popis.trim();
+      if (prazdny && vecer.bloky.length) { vecer.upravovany = null; vecer.rozpracovany = null; vecer.vlastniCinnost = false; }
+      else { AKCE.blokHotovo(); if (vecer.upravovany !== null) return; }
+    }
+    if (!vecer.bloky.length) return;
     await ulozVecer(false);
     oznam('Rozvrh je uložený. Můžeš kdykoli pokračovat.');
     prekresli();
@@ -3233,6 +3315,21 @@ function obnovNahledProsby() {
   if (n) n.innerHTML = prosba.text.trim() ? h(textProsby()) : '<span class="tlumene">Zatím prázdné – napiš prosbu nahoře.</span>';
   app.querySelectorAll('[data-akce="prosbaPoslat"]').forEach(b => { b.disabled = !prosba.text.trim(); });
 }
+
+// Přehled týdnů jde posouvat i přejetím prstem (doprava = do minulosti).
+let tydenDotyk = null;
+app.addEventListener('touchstart', e => {
+  const t = e.target.closest('[data-tyden-swipe]');
+  tydenDotyk = t ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null;
+}, { passive: true });
+app.addEventListener('touchend', e => {
+  if (!tydenDotyk) return;
+  const dx = e.changedTouches[0].clientX - tydenDotyk.x, dy = e.changedTouches[0].clientY - tydenDotyk.y;
+  tydenDotyk = null;
+  if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+  const novy = Math.min(0, posunTydne + (dx > 0 ? -1 : 1));
+  if (novy !== posunTydne) { posunTydne = novy; prekresli(); }
+});
 
 window.addEventListener('hashchange', vykresli);
 
