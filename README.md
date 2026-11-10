@@ -51,7 +51,7 @@ bun run build
 bun run preview -- --host 127.0.0.1 --port 4321 --ignore-lock
 ```
 
-Adresa preview je v tomto příkladu `http://127.0.0.1:4321/mam-se/`. Stejný port nemůže současně používat dev i preview. Nasaditelný obsah je v `dist/`; automatické nasazování není nastavené. Hosting a produkční URL: **DOPLNIT PŘED MERGEM** autorkou.
+Adresa preview je v tomto příkladu `http://127.0.0.1:4321/mam-se/`. Stejný port nemůže současně používat dev i preview. Nasaditelný obsah je v `dist/`; automatické nasazování po push není nastavené. Ruční, výslovně povolované Pages nasazení a GitHub CI popisuje [návod pro správu](docs/MAINTAINER.md). Hosting a produkční URL: **DOPLNIT PŘED MERGEM** autorkou.
 
 ## Automatické kontroly
 
@@ -126,3 +126,7 @@ Kolo emocí a kolo potřeb © Emer, Mimonádovna. Průvodce je inspirovaný nen�
 Mám se! není zdravotnický prostředek a nenahrazuje odbornou pomoc.
 
 Písmo Fraunces © The Fraunces Project Authors, SIL Open Font License 1.1; text je v `public/fonty/Fraunces-OFL.txt`. Provozovatel, licence aplikace, držitel práv a bezpečnostní kontakt: **DOPLNIT PŘED MERGEM** autorkou. Závislosti ani přibalená fontová licence samy neudělují licenci aplikaci; v `package.json` zůstává `UNLICENSED`.
+
+## Spolupráce a další kroky
+
+[Jak přispět](CONTRIBUTING.md) · [Bezpečnost](SECURITY.md) · [Pravidla spolupráce](CODE_OF_CONDUCT.md) · [Stav licence](LICENSE) · [Správa a Pages](docs/MAINTAINER.md) · [Malá roadmapa pro Claude Code](docs/ROADMAP.md).
