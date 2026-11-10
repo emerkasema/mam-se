@@ -1,6 +1,8 @@
 import { Json, NonNegativeInt, type Query } from '@evolu/common';
 import { initializeDiaryClient } from '../../../../src/data/client.ts';
+import { mapLegacySnapshot, restoreLegacySnapshot } from '../../../../src/data/mapping.ts';
 import { createRowId, type DiarySchema, type schema } from '../../../../src/data/schema.ts';
+import { mappingFixture, photoBase64 } from '../../../fixtures/mapping.ts';
 
 const status = document.querySelector('#status')!;
 try {
@@ -18,7 +20,17 @@ try {
     },
   });
   Object.assign(window, {
-    diary: { client, raw, day, createRowId, zero: NonNegativeInt.orThrow(0) },
+    diary: {
+      client,
+      raw,
+      day,
+      createRowId,
+      mapLegacySnapshot,
+      restoreLegacySnapshot,
+      mappingFixture,
+      photoBase64,
+      zero: NonNegativeInt.orThrow(0),
+    },
   });
   status.textContent = client.persistence;
 } catch (error) {
@@ -28,6 +40,10 @@ try {
 declare global {
   interface Window {
     diary: {
+      mapLegacySnapshot: typeof mapLegacySnapshot;
+      restoreLegacySnapshot: typeof restoreLegacySnapshot;
+      mappingFixture: typeof mappingFixture;
+      photoBase64: typeof photoBase64;
       client: Awaited<ReturnType<typeof initializeDiaryClient>>;
       raw: (sql: string) => Promise<unknown>;
       day: (

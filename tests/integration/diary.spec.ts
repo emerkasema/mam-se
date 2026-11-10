@@ -182,3 +182,139 @@ test('raw Evolu calls can commit an earlier row when a later call throws synchro
   });
   expect(result).toEqual({ threw: true, rows: [{ legacyKey: 'partial' }] });
 });
+
+test('legacy mapping preserves all stores and a decodable photo through Evolu and reload', async ({
+  page,
+}) => {
+  let sockets = 0;
+  page.on('websocket', () => sockets++);
+  await page.goto('./diary/');
+  await expect(page.locator('#status')).toHaveText(/^(Persisted|Unknown)$/);
+  await page.evaluate(async () => {
+    const { client, mappingFixture, photoBase64, mapLegacySnapshot } = window.diary;
+    const input = mappingFixture();
+    input.zaznamy[0]!.fotka = new Blob(
+      [Uint8Array.from(atob(photoBase64), (c) => c.charCodeAt(0))],
+      { type: 'image/png' },
+    );
+    // Dvě stejné fotky sdílejí chunky, ale mají samostatné reference.
+    input.zaznamy[2]!.fotka = input.zaznamy[0]!.fotka;
+    const pending = mapLegacySnapshot(input, client.evolu);
+    input.zaznamy[1]!.popis_bloku = 'Změna během hashování';
+    input.nastaveni.length = 0;
+    await client.writeBatch(await pending);
+  });
+  await page.reload();
+  await expect(page.locator('#status')).toHaveText(/^(Persisted|Unknown)$/);
+  const result = await page.evaluate(async () => {
+    const { client, raw, restoreLegacySnapshot, mappingFixture, photoBase64 } = window.diary;
+    const writes = [];
+    for (const table of [
+      'entry',
+      'day',
+      'week',
+      'setting',
+      'consent',
+      'recommendation',
+      'photoChunk',
+    ]) {
+      const rows = (await raw(`select * from "${table}"`)) as Record<string, unknown>[];
+      for (const row of rows) {
+        const keys =
+          table === 'photoChunk'
+            ? ['id', 'hash', 'index', 'bytes']
+            : table === 'entry'
+              ? ['id', 'legacyKey', 'payload', 'startedAt']
+              : ['id', 'legacyKey', 'payload'];
+        writes.push({ table, values: Object.fromEntries(keys.map((key) => [key, row[key]])) });
+      }
+    }
+    const restored = await restoreLegacySnapshot(
+      writes as unknown as Parameters<typeof restoreLegacySnapshot>[0],
+      client.evolu,
+    );
+    const expected = mappingFixture();
+    const sizes = [];
+    for (const index of [0, 2]) {
+      const photo = restored.zaznamy[index]!.fotka as Blob;
+      const bitmap = await createImageBitmap(photo);
+      sizes.push([bitmap.width, bitmap.height]);
+      bitmap.close();
+      if (
+        photo.type !== 'image/png' ||
+        btoa(String.fromCharCode(...new Uint8Array(await photo.arrayBuffer()))) !== photoBase64
+      )
+        throw new Error('Photo bytes changed');
+      restored.zaznamy[index]!.fotka = null;
+    }
+    // Pořadí vrací DB podle ID, nikoli podle vložení; obsah musí souhlasit.
+    const primary: Record<string, string> = {
+      zaznamy: 'id',
+      dny: 'datum',
+      tydny: 'tyden',
+      souhlasy: 'id',
+      doporuceni: 'co',
+      nastaveni: 'key',
+    };
+    const normalize = (s: typeof restored) =>
+      Object.fromEntries(
+        Object.entries(s).map(([key, rows]) => [
+          key,
+          (rows as Record<string, unknown>[]).sort((a, b) =>
+            String(a[primary[key]!]).localeCompare(String(b[primary[key]!])),
+          ),
+        ]),
+      );
+    return {
+      actual: normalize(restored),
+      expected: normalize(expected),
+      sizes,
+      chunks: writes.filter((w) => w.table === 'photoChunk').length,
+    };
+  });
+  expect(result.actual).toEqual(result.expected);
+  expect(result.sizes).toEqual([
+    [1, 1],
+    [1, 1],
+  ]);
+  expect(result.chunks).toBe(1);
+  expect(sockets).toBe(0);
+});
+
+test('mapping refuses corrupt photos and oversized content before any diary writes', async ({
+  page,
+}) => {
+  await page.goto('./diary/');
+  await expect(page.locator('#status')).toHaveText(/^(Persisted|Unknown)$/);
+  const result = await page.evaluate(async () => {
+    const { client, raw, mapLegacySnapshot, mappingFixture } = window.diary;
+    const errors = [];
+    for (const kind of ['photo', 'large']) {
+      const snapshot = mappingFixture();
+      if (kind === 'photo')
+        snapshot.zaznamy[2]!.fotka = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' });
+      else snapshot.souhlasy[0]!.extra = 'x'.repeat(640_000);
+      try {
+        await client.writeBatch(await mapLegacySnapshot(snapshot, client.evolu));
+      } catch (error) {
+        errors.push((error as Error).message);
+      }
+    }
+    const counts = [];
+    for (const table of [
+      'entry',
+      'day',
+      'week',
+      'setting',
+      'consent',
+      'recommendation',
+      'photoChunk',
+    ]) {
+      counts.push(await raw(`select count(*) as count from "${table}"`));
+    }
+    return { errors, counts };
+  });
+  expect(result.errors[0]).toMatch(/dekódovat/);
+  expect(result.errors[1]).toMatch(/limit/);
+  expect(result.counts).toEqual(Array.from({ length: 7 }, () => [{ count: 0 }]));
+});

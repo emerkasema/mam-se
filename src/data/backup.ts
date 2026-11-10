@@ -11,11 +11,27 @@ export type LegacyBackup = Record<LegacyCollection, LegacyObject[]> & {
 };
 const dangerousKeys = new Set(['__proto__', 'prototype', 'constructor']);
 
-function assertSafeJson(value: unknown, depth = 0): void {
+export function assertSafeJson(value: unknown, depth = 0): void {
   if (depth > 40) throw new Error('Záloha má příliš hlubokou strukturu.');
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
-  if (typeof value === 'number' && Number.isFinite(value)) return;
+  if (typeof value === 'number' && Number.isFinite(value) && !Object.is(value, -0)) return;
+  if (value && typeof value === 'object') {
+    // JSON nesmí tiše zahodit symbol, getter, skryté pole ani díru v poli.
+    for (const key of Reflect.ownKeys(value)) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (Array.isArray(value) && key === 'length') continue;
+      if (
+        typeof key !== 'string' ||
+        !descriptor ||
+        !descriptor.enumerable ||
+        !('value' in descriptor)
+      )
+        throw new Error('Obsah nelze bezeztrátově uložit jako JSON.');
+    }
+  }
   if (Array.isArray(value)) {
+    if (Object.keys(value).length !== value.length)
+      throw new Error('Pole nelze bezeztrátově uložit jako JSON.');
     for (const item of value) assertSafeJson(item, depth + 1);
     return;
   }
@@ -25,7 +41,7 @@ function assertSafeJson(value: unknown, depth = 0): void {
     assertSafeJson(item, depth + 1);
   }
 }
-function asObject(value: unknown): LegacyObject {
+export function asObject(value: unknown): LegacyObject {
   if (
     !value ||
     typeof value !== 'object' ||
@@ -36,19 +52,22 @@ function asObject(value: unknown): LegacyObject {
   }
   return value as LegacyObject;
 }
-function requireString(value: unknown, field: string): asserts value is string {
+export function requireString(value: unknown, field: string): asserts value is string {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`Neplatné pole ${field}.`);
 }
-function checkTime(value: unknown, field: string): void {
+export function checkTime(value: unknown, field: string): void {
   if (
     typeof value !== 'string' ||
-    !/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value) ||
-    !Number.isFinite(Date.parse(value))
+    !/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.test(
+      value,
+    ) ||
+    !Number.isFinite(Date.parse(value)) ||
+    new Date(value.slice(0, 10)).toISOString().slice(0, 10) !== value.slice(0, 10)
   ) {
     throw new Error(`Neplatné datum ${field}.`);
   }
 }
-function checkRange(value: unknown, field: string, min: number, max: number): void {
+export function checkRange(value: unknown, field: string, min: number, max: number): void {
   if (
     value != null &&
     (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max)

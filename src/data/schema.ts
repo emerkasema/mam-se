@@ -8,7 +8,7 @@ import {
 } from '@evolu/common';
 
 // JSON je jedna konfliktní jednotka. Ověření doménových polí a legacy mapování
-// patří budoucímu adaptéru; samotné platné JSON ještě není platný záznam deníku.
+// provádí mapping.ts; samotné platné JSON ještě není platný záznam deníku.
 export const schema = {
   entry: { id: id('Entry'), legacyKey: Text, payload: Json, startedAt: Text },
   day: { id: id('Day'), legacyKey: Text, payload: Json },
