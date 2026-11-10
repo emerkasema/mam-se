@@ -22,6 +22,16 @@ Linux (`ubuntu-24.04`) spouští check, produkční build, unit, funkční E2E v
 
 ## První Pages nasazení — po rozhodnutí autorky
 
+Pokud dostaneš tento základ jen v referenční větvi, nemusíš jej slučovat do
+`main`. Můžeš si větev stáhnout a vyzkoušet lokálně podle README. Push do
+`miccy-main` nebo `codex-*` spustí CI, pokud jsou v repozitáři povolené Actions.
+Ruční Pages workflow se však v nabídce objeví až tehdy, když je přítomné ve
+výchozí větvi. Samotný push referenční větve tedy nezaručuje dostupné tlačítko
+pro nasazení. Pro samostatné demo lze po rozhodnutí použít vlastní fork s touto
+větví jako výchozí a samostatně nastavenými Pages; výchozí větev původního
+projektu kvůli vyzkoušení neměň. Jiný repozitář pod stejným Pages originem není
+izolace místních dat — i demo zkoušej v odděleném profilu prohlížeče.
+
 1. V Settings → Pages zvol **Source: GitHub Actions**. Potvrď doménu a HTTPS (u vlastní domény také DNS/certifikát). V environmentu `github-pages` povol jen publikační větev; dostupné schvalování použij podle týmu a tarifu. Výchozí větev musí obsahovat ruční workflow, aby se nabídlo v Actions.
 2. Repository variables: `PAGES_DEPLOY_REPOSITORY` = přesné potvrzené `owner/repo`, `PAGES_DEPLOY_BRANCH` = schválená větev bez `refs/heads/`, `PAGES_SITE_URL` = skutečná potvrzená HTTPS adresa webu odpovídající metadatům Pages. Teprve po kontrole nastav `PAGES_DEPLOY_ENABLED` na přesné `true`. Chybějící hodnoty deploy nepovolí; nejde o údaje, které má agent odhadnout.
 3. V Actions spusť **Pages (manual)** na schválené větvi. Workflow ověří repozitář/větev i povolení, přečte již nastavené Pages pomocí `configure-pages` (bez automatického enablementu) a porovná URL s potvrzenou proměnnou. Odvodí normalizované `PUBLIC_APP_BASE`: projekt typicky `/repo/`, uživatelský web nebo vlastní doména `/`. Build i browser testy dostanou stejnou hodnotu. Astro `site` se nenastavuje na odhadnutou URL.
