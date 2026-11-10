@@ -34,13 +34,14 @@ test('legacy reader does not create a database and preserves a complete snapshot
     } finally { db.close(); }
   }, legacyFixture);
   await page.reload();
-  await expect(page.locator('#snapshot')).not.toHaveText('null');
+  await expect(page.locator('#snapshot')).toHaveText(/^\{/);
   expect(JSON.parse(await page.locator('#snapshot').innerText())).toEqual({
     ...legacyFixture,
     zaznamy: [{ ...legacyFixture.zaznamy[0], fotka: { mime: 'image/png', bytes: [137, 80, 78, 71, 13, 10, 26, 10] } }],
     nastaveni: [{ key: 'extra', value: { original: true } }, { key: 'hlavni', value: legacyFixture.nastaveni }],
   });
   await page.reload();
+  await expect(page.locator('#snapshot')).toHaveText(/^\{/);
   expect(JSON.parse(await page.locator('#snapshot').innerText())).toEqual({
     ...legacyFixture,
     zaznamy: [{ ...legacyFixture.zaznamy[0], fotka: { mime: 'image/png', bytes: [137, 80, 78, 71, 13, 10, 26, 10] } }],

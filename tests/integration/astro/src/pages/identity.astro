@@ -1,0 +1,10 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8" /><title>Identity persistence</title></head><body><output id="identity">Loading</output></body></html>
+<script>
+  import { getOrCreateOwnerSecret } from '../../../../../src/data/identity';
+  // Test ukazuje jen otisk náhodné syntetické identity; nikdy její tajemství.
+  try {
+    const secret = await getOrCreateOwnerSecret();
+    const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', new Uint8Array(secret)));
+    document.querySelector('#identity')!.textContent = Array.from(hash).map(byte => byte.toString(16).padStart(2, '0')).join('');
+  } catch (error) { document.querySelector('#identity')!.textContent = error instanceof Error ? error.message : 'error'; }
+</script>
