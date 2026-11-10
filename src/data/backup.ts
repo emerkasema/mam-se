@@ -1,3 +1,5 @@
+import type { LegacySnapshot } from './legacy.ts';
+import { mapLegacySnapshot } from './mapping.ts';
 // České klíče jsou přenosový kontrakt záloh 0.7.0, nikoliv nové schéma Evolu.
 export type LegacyObject = Record<string, unknown>;
 export const legacyCollections = ['zaznamy', 'dny', 'tydny', 'souhlasy', 'doporuceni'] as const;
@@ -155,4 +157,76 @@ export function shouldReplace(local: LegacyObject, incoming: LegacyObject): bool
   const localTime = timestamp(local),
     incomingTime = timestamp(incoming);
   return Number.isFinite(localTime) && Number.isFinite(incomingTime) && incomingTime > localTime;
+}
+
+// Rozšíření formátu 1 uchová out-of-line klíče nastavení. Původní čtečka
+// může dál použít nastaveni; nová čtečka dává přednost úplným settingsEntries.
+export async function prepareImport(
+  input: unknown,
+  evolu: Parameters<typeof mapLegacySnapshot>[1],
+): Promise<LegacySnapshot> {
+  const backup = validateBackupStructure(input);
+  const allowed = new Set([
+    'aplikace',
+    'format_zalohy',
+    'nastaveni',
+    'exportovano',
+    'verze_aplikace',
+    'settingsEntries',
+    ...legacyCollections,
+  ]);
+  for (const field of Object.keys(backup))
+    if (!allowed.has(field))
+      throw new Error(`Neznámé pole zálohy ${field}. Obsah nebyl vynechán ani uložen.`);
+  const snapshot: LegacySnapshot = {
+    zaznamy: backup.zaznamy,
+    dny: backup.dny,
+    tydny: backup.tydny,
+    souhlasy: backup.souhlasy,
+    doporuceni: backup.doporuceni,
+    nastaveni: [{ key: 'hlavni', value: backup.nastaveni }],
+  };
+  const entries = (backup as LegacyBackup & { settingsEntries?: unknown }).settingsEntries;
+  if (entries !== undefined) {
+    if (!Array.isArray(entries)) throw new Error('Neplatné položky nastavení v záloze.');
+    snapshot.nastaveni = entries as LegacySnapshot['nastaveni'];
+    const main = snapshot.nastaveni.find((item) => item?.key === 'hlavni')?.value ?? {};
+    if (JSON.stringify(main) !== JSON.stringify(backup.nastaveni))
+      throw new Error('Nastavení v záloze si odporují.');
+  }
+  for (const row of snapshot.zaznamy)
+    if (typeof row.fotka === 'string') {
+      const [header, encoded] = row.fotka.split(',');
+      if (!header || !encoded) throw new Error('Neplatná fotka v záloze.');
+      const binary = atob(encoded);
+      // Žádný fetch uživatelské URL a žádná ztrátová komprese. Mapper následně
+      // dekóduje obraz a změří všechny mutace, včetně pozdějších řádků importu.
+      row.fotka = new Blob([Uint8Array.from(binary, (c) => c.charCodeAt(0))], {
+        type: header.slice(5, -7),
+      });
+    }
+  await mapLegacySnapshot(snapshot, evolu);
+  return snapshot;
+}
+
+export async function exportSnapshot(snapshot: LegacySnapshot) {
+  const data = structuredClone(snapshot);
+  for (const row of data.zaznamy)
+    if (row.fotka instanceof Blob) {
+      row.fotka = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(row.fotka as Blob);
+      });
+    }
+  return {
+    aplikace: 'Mám se!' as const,
+    format_zalohy: 1 as const,
+    exportovano: new Date().toISOString(),
+    verze_aplikace: '0.7.0',
+    ...Object.fromEntries(legacyCollections.map((name) => [name, data[name]])),
+    nastaveni: (data.nastaveni.find((item) => item.key === 'hlavni')?.value ?? {}) as LegacyObject,
+    settingsEntries: data.nastaveni,
+  } as LegacyBackup & { settingsEntries: LegacySnapshot['nastaveni'] };
 }

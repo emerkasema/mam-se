@@ -61,3 +61,24 @@ export async function getOrCreateOwnerSecret(): Promise<OwnerSecret> {
     }
   });
 }
+
+// Volá pouze místní reset po potvrzeném smazání Evolu DB, pod storage zámkem.
+export async function forgetOwnerSecret(): Promise<void> {
+  await navigator.locks.request('mam-se:identity', async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('mamse-identity', 1);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction('identity', 'readwrite');
+        tx.objectStore('identity').delete('ownerSecret');
+        tx.oncomplete = () => resolve();
+        tx.onabort = () => reject(tx.error);
+      });
+    } finally {
+      db.close();
+    }
+  });
+}

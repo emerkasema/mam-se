@@ -4,7 +4,7 @@ import { createBatchWriter } from './batch.ts';
 import { getOrCreateOwnerSecret } from './identity.ts';
 import { schema } from './schema.ts';
 
-// Zatím není importováno aplikací. Připojení deníku čeká na adaptér a migraci.
+// Klient produkčního lokálního deníku; síťové transporty zůstávají vypnuté.
 export async function initializeDiaryClient() {
   const secret = await getOrCreateOwnerSecret();
   const deps = createEvoluDeps();

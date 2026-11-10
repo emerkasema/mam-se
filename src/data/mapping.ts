@@ -229,10 +229,7 @@ function checkWrites(writes: readonly BatchWrite[], evolu: MutationSizer) {
 
 // Čistá příprava bez DB zápisů; writer musí i nadále ověřit dávku před odesláním.
 // Toto není prepareImport: nevstupuje sem JSON záloha ani data URL fotky.
-export async function mapLegacySnapshot(
-  input: LegacySnapshot,
-  evolu: MutationSizer,
-): Promise<BatchWrite[]> {
+export function copyLegacySnapshot(input: LegacySnapshot): LegacySnapshot {
   const sourceSnapshot = record(input, 'snapshot');
   if (
     Reflect.ownKeys(sourceSnapshot).length !== 6 ||
@@ -264,7 +261,14 @@ export async function mapLegacySnapshot(
       }
     }
   }
-  const snapshot = structuredClone(input);
+  return structuredClone(input);
+}
+
+export async function mapLegacySnapshot(
+  input: LegacySnapshot,
+  evolu: MutationSizer,
+): Promise<BatchWrite[]> {
+  const snapshot = copyLegacySnapshot(input);
   const writes: BatchWrite[] = [];
   const photos = new Map<string, BatchWrite>();
   for (const collection of legacyCollections) {
