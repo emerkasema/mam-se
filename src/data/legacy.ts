@@ -6,6 +6,9 @@ export type LegacySnapshot = Record<LegacyCollection, LegacyObject[]> & {
 
 // Převod nesmí na novém zařízení vytvořit prázdnou starou DB. Pokud ji někdo
 // mezitím smaže, upgrade přerušíme; nepoužíváme žádný legacy zápis ani clear.
+// Snapshot je konzistentní díky jedné readonly transakci přes všechny stores.
+// Není ještě validovaným plánem migrace: volající musí ověřit obsah a před
+// převodem zajistit, že stará aplikace v jiné kartě dál nezapisuje.
 export async function readLegacySnapshot(): Promise<LegacySnapshot | null> {
   const databases = await indexedDB.databases();
   if (!databases.some((database) => database.name === 'mamse')) return null;
@@ -61,6 +64,8 @@ export async function readLegacySnapshot(): Promise<LegacySnapshot | null> {
         (name) => [name, transaction.objectStore(name).getAll()] as const,
       );
       const settings = transaction.objectStore('nastaveni');
+      // Nastavení mají klíče mimo uloženou hodnotu. Zachováme každý pár,
+      // nejen známý klíč „hlavni“, aby budoucí migrace neztratila další nastavení.
       const settingKeys = settings.getAllKeys();
       const settingValues = settings.getAll();
       transaction.onabort = () =>

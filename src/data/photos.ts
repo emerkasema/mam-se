@@ -18,8 +18,11 @@ async function digest(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
     .join('');
 }
 
-// Dělíme původní bajty, nikoliv znovu komprimovaný obrázek. Každá část se vejde
-// do Evolu mutace; úplnost a hash se ověřují před zobrazením i exportem.
+// Dělíme původní bajty, nikoliv znovu komprimovaný obrázek. Velikost části
+// ponechává rezervu pro metadata mutace; úplnost a hash ověřujeme při složení.
+// MIME je zde deklarace volajícího, nikoliv ověření dekódovatelného obrázku.
+// Import musí obrázek ověřit předem a změřit celou výslednou Evolu mutaci
+// včetně metadat. Hash kontroluje shodu bajtů; sám data nešifruje.
 export async function splitPhoto(
   photo: Blob,
 ): Promise<{ reference: PhotoReference; chunks: PhotoChunk[] }> {

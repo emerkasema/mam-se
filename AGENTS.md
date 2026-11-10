@@ -11,7 +11,7 @@
 ## Git a soukromé plánování
 
 - Nejdřív ověř `git status`, větev a remotes. Zachovej cizí rozpracované změny.
-- Zdejší `origin` je GitLab. `main` slouží pull mirroru z upstreamu, `miccy-main` je naše integrační větev. `miccy-dev` je plánovaná větev uživatele; nevytvářej ji automaticky. Pracuj ve vlastní `codex-` větvi od `miccy-main`; existující implementační větev lze dál používat.
+- Zdejší `origin` je GitLab. `main` slouží pull mirroru z upstreamu, `miccy-main` je naše integrační větev. `miccy-dev` již existuje a obsahuje první implementaci. Pro navazující práci vytvoř vlastní `codex-` větev z aktuálního `miccy-dev`; existující implementační větev lze dál používat, pokud obsahuje jeho změny. Stav větví vždy ověř z Gitu, ne pouze z tohoto popisu.
 - Commituj po logických ověřených změnách, s anglickými prefixy `feat:`, `fix:`, `build:`, `refactor:` nebo `docs:`. Nikdy do `main`. Nevypínej podpisování kvůli chybě podpisové služby.
 - Předání proběhne až po kontrole uživatele: naše větev → `miccy-dev` → `miccy-main` → PR, který uživatel připraví přes GitLab mirror nebo přímo GitHub. Samotný popis tohoto pořadí neopravňuje k vytvoření větve, merge ani push.
 - Bez výslovného pokynu nedělej push, merge, PR/MR, deploy, force push ani změny mirrorů/remotes. Předání na GitHub je samostatná akce na konkrétní větev.

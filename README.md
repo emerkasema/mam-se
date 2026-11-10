@@ -63,6 +63,20 @@ V testech jsou povolené non-null assertions nad známými fixtures a Playwright
 
 Aplikace nyní používá Astro jako statickou obálku. Data se **stále ukládají původní implementací do IndexedDB**. Samostatná klientská integrace Evolu má browser testy zápisu, čtení, reloadu a dostupnosti workerů/WASM. Pomocné moduly v `src/data/` zatím nejsou zapojené do deníku; synchronizace, obnova identity a migrace na Evolu nejsou implementované. Písmo Fraunces se stále načítá z Google Fonts. Podrobné instrukce pro agenta jsou v [AGENTS.md](AGENTS.md).
 
+### Jak číst připravenou datovou vrstvu
+
+| Modul | Co už dělá | Co ještě nezaručuje |
+| --- | --- | --- |
+| `src/data/identity.ts` | Vytvoří a uloží tajemství vlastníka; dvě karty použijí stejnou identitu. Poškozenou identitu nenahradí novou. | Přihlášení, obnovu fráze, reset ani ochranu před kódem stejného originu. |
+| `src/data/legacy.ts` | Přečte všech šest původních úložišť v jedné transakci, zachová fotky i klíče nastavení. | Validaci obsahu, zastavení zápisů staré aplikace nebo samotný převod. |
+| `src/data/backup.ts` | Ověří strukturu JSON zálohy a pravidlo pro porovnání času změn. | Úplnou přípravu importu, dekódování fotek nebo kontrolu limitů Evolu. |
+| `src/data/photos.ts` | Rozdělí bajty fotky a složí je až po kontrole úplnosti a SHA-256. | Šifrování, rozpoznání skutečného formátu obrázku nebo zápis do databáze. |
+
+Při čtení kódu rozlišuj **přípravu dat** a **potvrzené uložení**. Úspěšná
+validace či rozdělení fotky ještě nic nezapsaly. Budoucí adaptér musí potvrdit
+dokončený zápis a migraci ověřit zpětným načtením, než přepne deník na Evolu.
+Samotná přítomnost závislosti Evolu současná data deníku nešifruje.
+
 Samostatné integrační testy spustíš takto:
 
 ```sh
