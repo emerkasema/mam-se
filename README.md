@@ -26,27 +26,38 @@ Osobní deník pohody. Webová aplikace (PWA), která běží v telefonu a všec
 
 ## Jak vyzkoušet změny
 
-Potřebuješ Node podle `.node-version` a npm podle `package.json`.
+Potřebuješ Bun podle `.bun-version` a Node podle `.node-version`. Bun spravuje závislosti a spouští příkazy; Astro, build SW a stávající `node:test` zatím používají Node. Používej `bun run test`, nikoli nativní `bun test`, který by sbíral také Playwright testy.
 
-1. Nainstaluj závislosti: `npm ci`.
-2. Spusť vývoj: `npm run dev`.
+1. Nainstaluj závislosti: `bun install --frozen-lockfile`.
+2. Spusť vývoj: `bun run dev`.
 3. Otevři vypsanou adresu s cestou `/mam-se/`.
 
 Před předáním změny spusť:
 
 ```sh
-npm run check
-npm run build
-npm test
-npm exec playwright -- install chromium
-npm run test:e2e
+bun run check
+bun run build
+bun run test
+bunx --no-install playwright install chromium
+bun run test:e2e
 ```
 
-`npm test` kontroluje výstup buildu, proto build spouštěj první. Browser testy používají syntetický deník a ověřují uložení, reload, offline otevření a navigaci. `check` zatím kontroluje pouze TypeScript soubory; původní JS a typy `.astro` šablon nepokrývá.
+`bun run test` kontroluje výstup buildu, proto build spouštěj první. Browser testy používají syntetický deník a ověřují uložení, reload, offline otevření a navigaci. `typecheck` kontroluje pouze TypeScript soubory; `check` přidává také Biome. Typová kontrola původní JS a `.astro` šablony nepokrývá.
 
-`npm run preview` otevře hotový build se service workerem. V režimu `dev` se service worker neregistruje. Pokud Astro pod agentem spustí preview na pozadí, ukončíš jej `npm exec astro -- preview stop`.
+`bun run preview` otevře hotový build se service workerem. V režimu `dev` se service worker neregistruje. Pokud Astro pod agentem spustí preview na pozadí, ukončíš jej `bunx --no-install astro preview stop`.
 
 Nasazuje se obsah `dist/`, nikoliv zdrojové soubory. Výchozí cesta je `/mam-se/`; pro kořen webu nastav `PUBLIC_APP_BASE=/` při buildu i preview/testu. Před skutečným nasazením potvrď původní doménu — místní data jsou vázaná na origin prohlížeče.
+
+## Lint a formátování
+
+`bun run check` spouští Biome a typovou kontrolu. `bun run lint` zkontroluje styl,
+importy a lint pravidla; `bun run format` formátování opraví. Používáme Biome 2.6.6.
+
+Kontrola pokrývá nové datové TS moduly, testy, build skripty a konfiguraci.
+Původní `src/app/`, veřejné assety a `.astro` šablony nejsou plošně přeformátované.
+Podpora `.astro` v Biome je experimentální; obálku ověřuje build a browser testy.
+V testech jsou povolené non-null assertions nad známými fixtures a Playwright
+`innerText()`; pravidlo pro DOM `textContent` se na toto testovací API nehodí.
 
 ## Stav technického základu
 
@@ -55,9 +66,9 @@ Aplikace nyní používá Astro jako statickou obálku. Data se **stále ukláda
 Samostatné integrační testy spustíš takto:
 
 ```sh
-npm exec playwright -- install chromium firefox webkit
-npm run build:integration
-npm run test:integration
+bunx --no-install playwright install chromium firefox webkit
+bun run build:integration
+bun run test:integration
 ```
 
 Testovací stránka se nedostane do produkčního `dist/`. Podrobnosti a hranice

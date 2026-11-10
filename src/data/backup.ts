@@ -1,10 +1,13 @@
 // České klíče jsou přenosový kontrakt záloh 0.7.0, nikoliv nové schéma Evolu.
 export type LegacyObject = Record<string, unknown>;
 export const legacyCollections = ['zaznamy', 'dny', 'tydny', 'souhlasy', 'doporuceni'] as const;
-export type LegacyCollection = typeof legacyCollections[number];
+export type LegacyCollection = (typeof legacyCollections)[number];
 export type LegacyBackup = Record<LegacyCollection, LegacyObject[]> & {
-  aplikace: 'Mám se!'; format_zalohy: 1; nastaveni: LegacyObject;
-  exportovano?: string; verze_aplikace?: string;
+  aplikace: 'Mám se!';
+  format_zalohy: 1;
+  nastaveni: LegacyObject;
+  exportovano?: string;
+  verze_aplikace?: string;
 };
 const dangerousKeys = new Set(['__proto__', 'prototype', 'constructor']);
 
@@ -12,7 +15,10 @@ function assertSafeJson(value: unknown, depth = 0): void {
   if (depth > 40) throw new Error('Záloha má příliš hlubokou strukturu.');
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
   if (typeof value === 'number' && Number.isFinite(value)) return;
-  if (Array.isArray(value)) { value.forEach(item => assertSafeJson(item, depth + 1)); return; }
+  if (Array.isArray(value)) {
+    for (const item of value) assertSafeJson(item, depth + 1);
+    return;
+  }
   const object = asObject(value);
   for (const [key, item] of Object.entries(object)) {
     if (dangerousKeys.has(key)) throw new Error('Záloha obsahuje nebezpečný klíč.');
@@ -20,7 +26,12 @@ function assertSafeJson(value: unknown, depth = 0): void {
   }
 }
 function asObject(value: unknown): LegacyObject {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Object.prototype
+  ) {
     throw new Error('Záloha obsahuje neplatný objekt.');
   }
   return value as LegacyObject;
@@ -29,12 +40,19 @@ function requireString(value: unknown, field: string): asserts value is string {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`Neplatné pole ${field}.`);
 }
 function checkTime(value: unknown, field: string): void {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value) || !Number.isFinite(Date.parse(value))) {
+  if (
+    typeof value !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value) ||
+    !Number.isFinite(Date.parse(value))
+  ) {
     throw new Error(`Neplatné datum ${field}.`);
   }
 }
 function checkRange(value: unknown, field: string, min: number, max: number): void {
-  if (value != null && (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max)) {
+  if (
+    value != null &&
+    (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max)
+  ) {
     throw new Error(`Neplatný rozsah ${field}.`);
   }
 }
@@ -51,15 +69,26 @@ export function validateBackupStructure(input: unknown): LegacyBackup {
     const keys = new Set<string>();
     for (const value of rows) {
       const row = asObject(value);
-      const key = row[collection === 'dny' ? 'datum' : collection === 'tydny' ? 'tyden' : collection === 'doporuceni' ? 'co' : 'id'];
+      const key =
+        row[
+          collection === 'dny'
+            ? 'datum'
+            : collection === 'tydny'
+              ? 'tyden'
+              : collection === 'doporuceni'
+                ? 'co'
+                : 'id'
+        ];
       requireString(key, collection);
       if (keys.has(key)) throw new Error(`Duplicitní klíč v ${collection}.`);
       keys.add(key);
-      for (const field of ['vytvoreno', 'upraveno', 'kdy']) if (row[field] != null) checkTime(row[field], field);
+      for (const field of ['vytvoreno', 'upraveno', 'kdy'])
+        if (row[field] != null) checkTime(row[field], field);
       if (collection === 'zaznamy') {
         checkTime(row.chvile_od, 'chvile_od');
         checkTime(row.vytvoreno, 'vytvoreno');
-        if (!['okamzity', 'vecerni', 'oslava'].includes(String(row.typ))) throw new Error('Neplatný typ záznamu.');
+        if (!['okamzity', 'vecerni', 'oslava'].includes(String(row.typ)))
+          throw new Error('Neplatný typ záznamu.');
         checkRange(row.prijemnost, 'prijemnost', -3, 3);
         checkRange(row.smysluplnost, 'smysluplnost', 0, 6);
         checkRange(row.chvile_delka_min, 'chvile_delka_min', 0, Number.MAX_SAFE_INTEGER);
@@ -72,17 +101,26 @@ export function validateBackupStructure(input: unknown): LegacyBackup {
           }
         }
         if (row.fotka != null) {
-          const prefix = typeof row.fotka === 'string' ? /^data:image\/(jpeg|png|webp);base64,/.exec(row.fotka) : null;
+          const prefix =
+            typeof row.fotka === 'string'
+              ? /^data:image\/(jpeg|png|webp);base64,/.exec(row.fotka)
+              : null;
           const encoded = prefix ? (row.fotka as string).slice(prefix[0].length) : '';
           // Opakované skupiny regexu přetékají u velkých fotek zásobník. Jediná
           // znaková třída a samostatná kontrola délky nezávisí na hloubce vstupu.
-          if (!encoded.length || encoded.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) {
+          if (
+            !encoded.length ||
+            encoded.length % 4 !== 0 ||
+            !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)
+          ) {
             throw new Error('Neplatná vložená fotka v záloze.');
           }
         }
       }
-      if (collection === 'dny' && !/^\d{4}-\d{2}-\d{2}$/.test(key)) throw new Error('Neplatný den.');
-      if (collection === 'tydny' && !/^\d{4}-W(?:0[1-9]|[1-4]\d|5[0-3])$/.test(key)) throw new Error('Neplatný týden.');
+      if (collection === 'dny' && !/^\d{4}-\d{2}-\d{2}$/.test(key))
+        throw new Error('Neplatný den.');
+      if (collection === 'tydny' && !/^\d{4}-W(?:0[1-9]|[1-4]\d|5[0-3])$/.test(key))
+        throw new Error('Neplatný týden.');
     }
   }
   // Zatím pouze strukturální validace. Dekódování fotek a velikosti Evolu mutací
@@ -95,6 +133,7 @@ export function shouldReplace(local: LegacyObject, incoming: LegacyObject): bool
     const value = row.upraveno ?? row.vytvoreno;
     return typeof value === 'string' ? Date.parse(value) : NaN;
   };
-  const localTime = timestamp(local), incomingTime = timestamp(incoming);
+  const localTime = timestamp(local),
+    incomingTime = timestamp(incoming);
   return Number.isFinite(localTime) && Number.isFinite(incomingTime) && incomingTime > localTime;
 }

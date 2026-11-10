@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { legacyFixture } from '../fixtures/legacy.ts';
 
 // Fixní okamžik nestačí: UI používá místní datum i čas.
@@ -10,7 +10,7 @@ for (const width of [390, 1280]) {
     await page.clock.setFixedTime(new Date('2026-11-10T12:00:00+01:00'));
     await page.goto('./');
     await expect(page.locator('[data-akce="novyZaznam"]')).toBeVisible();
-    await page.evaluate(async fixture => {
+    await page.evaluate(async (fixture) => {
       const db = await new Promise<IDBDatabase>((resolve, reject) => {
         const request = indexedDB.open('mamse', 1);
         request.onsuccess = () => resolve(request.result);
@@ -28,26 +28,42 @@ for (const width of [390, 1280]) {
             else for (const value of values as unknown[]) store.put(value);
           }
         });
-      } finally { db.close(); }
+      } finally {
+        db.close();
+      }
     }, legacyFixture);
     await page.reload();
     const routes = [
-      ['home', 'domov'], ['entry', 'zaznam'],
+      ['home', 'domov'],
+      ['entry', 'zaznam'],
       ['detail', `detail/${legacyFixture.zaznamy[0]!.id}`],
-      ['evening', 'vecer/2026-11-10'], ['week', 'tyden/2026-W45'],
-      ['overview', 'prehled'], ['settings', 'nastaveni'],
+      ['evening', 'vecer/2026-11-10'],
+      ['week', 'tyden/2026-W45'],
+      ['overview', 'prehled'],
+      ['settings', 'nastaveni'],
     ];
     for (const [name, route] of routes) {
       await page.goto(`./#/${route}`);
       await expect(page.locator('main')).toBeVisible();
-      if (name === 'home') await expect(page.getByRole('heading', { name: 'Jak se máš?', exact: true })).toBeVisible();
+      if (name === 'home')
+        await expect(page.getByRole('heading', { name: 'Jak se máš?', exact: true })).toBeVisible();
       if (name === 'entry') await expect(page.locator('#text')).toBeVisible();
       if (name === 'detail') await expect(page.locator('[data-akce="smazatZaznam"]')).toBeVisible();
-      if (name === 'evening') await expect(page.getByRole('heading', { name: 'Co jsi dnes dělala/dělal?', exact: true })).toBeVisible();
-      if (name === 'week') await expect(page.getByRole('heading', { name: 'Tvůj týden', exact: true })).toBeVisible();
-      if (name === 'overview') await expect(page.getByRole('heading', { name: 'Můj přehled', exact: true })).toBeVisible();
-      if (name === 'settings') await expect(page.getByRole('heading', { name: 'Záloha', exact: true })).toBeVisible();
-      await expect(page).toHaveScreenshot(`${name}-${width}.png`, { fullPage: true, animations: 'disabled', maxDiffPixels: 50 });
+      if (name === 'evening')
+        await expect(
+          page.getByRole('heading', { name: 'Co jsi dnes dělala/dělal?', exact: true }),
+        ).toBeVisible();
+      if (name === 'week')
+        await expect(page.getByRole('heading', { name: 'Tvůj týden', exact: true })).toBeVisible();
+      if (name === 'overview')
+        await expect(page.getByRole('heading', { name: 'Můj přehled', exact: true })).toBeVisible();
+      if (name === 'settings')
+        await expect(page.getByRole('heading', { name: 'Záloha', exact: true })).toBeVisible();
+      await expect(page).toHaveScreenshot(`${name}-${width}.png`, {
+        fullPage: true,
+        animations: 'disabled',
+        maxDiffPixels: 50,
+      });
     }
   });
 }

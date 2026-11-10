@@ -1,4 +1,4 @@
-import { OwnerSecret, createOwnerSecret, createRandomBytes } from '@evolu/common';
+import { createOwnerSecret, createRandomBytes, OwnerSecret } from '@evolu/common';
 
 // Toto je místní tajemství, nikoliv zámek telefonu: kód stejného originu má
 // k IndexedDB přístup. Fráze ani tajemství nepatří do JSON záloh nebo logů.
@@ -12,7 +12,8 @@ export async function getOrCreateOwnerSecret(): Promise<OwnerSecret> {
         if (blocked) request.result.close();
         else resolve(request.result);
       };
-      request.onerror = () => reject(new Error('Identitu se nepodařilo otevřít. Deník nebyl připojen.'));
+      request.onerror = () =>
+        reject(new Error('Identitu se nepodařilo otevřít. Deník nebyl připojen.'));
       request.onblocked = () => {
         blocked = true;
         reject(new Error('Zavři ostatní karty aplikace a zkus znovu otevřít identitu.'));
@@ -41,8 +42,13 @@ export async function getOrCreateOwnerSecret(): Promise<OwnerSecret> {
             transaction.abort();
           }
         };
-        transaction.onabort = () => reject(failure ?? new Error('Identitu se nepodařilo trvale uložit. Deník nebyl připojen.'));
-        transaction.onerror = () => { /* Odmítnutí řeší onabort po ukončení transakce. */ };
+        transaction.onabort = () =>
+          reject(
+            failure ?? new Error('Identitu se nepodařilo trvale uložit. Deník nebyl připojen.'),
+          );
+        transaction.onerror = () => {
+          /* Odmítnutí řeší onabort po ukončení transakce. */
+        };
         // Klient Evolu smí vzniknout až po potvrzeném uložení klíče. Samotný
         // úspěch požadavku put ještě neznamená dokončenou IDB transakci.
         transaction.oncomplete = () => {
@@ -50,6 +56,8 @@ export async function getOrCreateOwnerSecret(): Promise<OwnerSecret> {
           else resolve(OwnerSecret.orThrow(secret.slice()));
         };
       });
-    } finally { db.close(); }
+    } finally {
+      db.close();
+    }
   });
 }

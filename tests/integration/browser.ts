@@ -4,7 +4,14 @@ import { test as baseTest } from '@playwright/test';
 // Vlastní dočasný profil ověřuje trvalé ukládání bez přístupu k profilu uživatele.
 export const test = baseTest.extend({
   context: async ({ playwright, browserName, baseURL }, use) => {
-    const context = await playwright[browserName].launchPersistentContext('', baseURL ? { baseURL } : {});
-    try { await use(context); } finally { await context.close(); }
+    const context = await playwright[browserName].launchPersistentContext(
+      '',
+      baseURL ? { baseURL } : {},
+    );
+    try {
+      await use(context);
+    } finally {
+      await context.close();
+    }
   },
 });

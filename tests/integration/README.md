@@ -4,12 +4,12 @@ Samostatný Astro root používá konfiguraci aplikace. Nevytváří routu v pro
 `dist/` a nečte deník. Náhodná identita v sessionStorage slouží pouze syntetickému
 testu reloadu; není to návrh úložiště identity aplikace.
 
-1. `npm exec playwright -- install chromium firefox webkit`
-2. `npm run build:integration`
-3. `npm run test:integration`
+1. `bunx --no-install playwright install chromium firefox webkit`
+2. `bun run build:integration`
+3. `bun run test:integration`
 
 Kořenovou cestu ověřuj se stejným `PUBLIC_APP_BASE=/` u obou příkazů.
-Vývojový server ověří `INTEGRATION_DEV=1 npm run test:integration`; test emitovaných
+Vývojový server ověří `INTEGRATION_DEV=1 bun run test:integration`; test emitovaných
 assetů se zde záměrně nespouští, protože patří produkčnímu buildu.
 
 Test používá vlastní dočasné persistentní profily. Ephemeral kontext WebKitu

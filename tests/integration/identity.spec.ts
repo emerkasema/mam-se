@@ -4,7 +4,10 @@ import { join } from 'node:path';
 import { expect } from '@playwright/test';
 import { test } from './browser.ts';
 
-test('concurrent tabs create one persistent identity and reload preserves it', async ({ page, context }) => {
+test('concurrent tabs create one persistent identity and reload preserves it', async ({
+  page,
+  context,
+}) => {
   const second = await context.newPage();
   await Promise.all([page.goto('./identity/'), second.goto('./identity/')]);
   await expect(page.locator('#identity')).toHaveText(/^[a-f0-9]{64}$/);
@@ -31,18 +34,29 @@ test('invalid persisted secret is rejected rather than silently replaced', async
         transaction.oncomplete = () => resolve();
         transaction.onabort = () => reject(transaction.error);
       });
-    } finally { db.close(); }
+    } finally {
+      db.close();
+    }
   });
   await page.reload();
-  await expect(page.locator('#identity')).toHaveText('Uložená identita je poškozená. Nebyla nahrazena.');
+  await expect(page.locator('#identity')).toHaveText(
+    'Uložená identita je poškozená. Nebyla nahrazena.',
+  );
 });
 
-test('identity survives closing and reopening a browser profile', async ({ playwright, browserName, baseURL }) => {
+test('identity survives closing and reopening a browser profile', async ({
+  playwright,
+  browserName,
+  baseURL,
+}) => {
   const directory = await mkdtemp(join(tmpdir(), 'mam-se-identity-'));
   try {
     let fingerprint = '';
     for (let attempt = 0; attempt < 2; attempt++) {
-      const context = await playwright[browserName].launchPersistentContext(directory, baseURL ? { baseURL } : {});
+      const context = await playwright[browserName].launchPersistentContext(
+        directory,
+        baseURL ? { baseURL } : {},
+      );
       try {
         const page = await context.newPage();
         await page.goto('./identity/');
@@ -50,7 +64,11 @@ test('identity survives closing and reopening a browser profile', async ({ playw
         const current = await page.locator('#identity').innerText();
         if (attempt === 0) fingerprint = current;
         else expect(current).toBe(fingerprint);
-      } finally { await context.close(); }
+      } finally {
+        await context.close();
+      }
     }
-  } finally { await rm(directory, { recursive: true, force: true }); }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
