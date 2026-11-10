@@ -3,12 +3,18 @@ import {
   type Evolu,
   type EvoluError,
   type InferType,
+  id,
   type MutationValues,
   maxMutationSize,
   object,
   type ReadonlyStore,
 } from '@evolu/common';
 import { type DiarySchema, schema, type TableName } from './schema.ts';
+
+export type BatchDelete = {
+  [T in TableName]: { table: T; delete: DiarySchema[T]['id']['Output'] };
+}[TableName];
+export type BatchChange = BatchWrite | BatchDelete;
 
 export type BatchWrite = {
   [T in TableName]: {
@@ -45,19 +51,24 @@ export function createBatchWriter(
   const unsubscribe = errors.subscribe(checkError);
   checkError();
 
-  function prepare<T extends TableName>(table: T, input: unknown) {
+  function prepare<T extends TableName>(table: T, input: unknown, deleted = false) {
     // TypeScript není runtime brána. Nejdřív validujeme VŠECHNY řádky a kopírujeme
     // jejich bajty, aby pozdější chyba nebo změna vstupu nezanechala půl dávky.
-    const parsed = validators[table].fromUnknown(input);
+    const parsed = deleted
+      ? object({ id: id('BatchDelete') }).fromUnknown({ id: input })
+      : validators[table].fromUnknown(input);
     if (!parsed.ok) throw new Error('Neplatné hodnoty dávky.');
     const values = parsed.value;
-    const snapshot = structuredClone(values) as unknown as MutationValues<DiarySchema[T], 'upsert'>;
+    const snapshot = {
+      ...structuredClone(values),
+      isDeleted: deleted ? 1 : 0,
+    } as unknown as MutationValues<DiarySchema[T], 'upsert'>;
     if (
       evolu.getMutationSize(table, snapshot as Partial<MutationValues<DiarySchema[T], 'update'>>) >
       maxMutationSize
     )
       throw new Error('Zápis překračuje limit Evolu. Obsah nebyl zkrácen ani odeslán.');
-    if (table === 'photoChunk') {
+    if (table === 'photoChunk' && !deleted) {
       const chunk = values as unknown as InferType<ReturnType<typeof photoChunkType>>;
       if (!/^[a-f0-9]{64}$/.test(chunk.hash) || !chunk.bytes.length || chunk.bytes.length > 262_144)
         throw new Error('Neplatná část fotky.');
@@ -98,7 +109,7 @@ export function createBatchWriter(
               if (
                 !row ||
                 rows.length !== 1 ||
-                row.isDeleted === 1 ||
+                row.isDeleted !== operation.values.isDeleted ||
                 Object.entries(operation.values).some(([key, value]) => {
                   const stored = (row as Record<string, unknown>)[key];
                   return value instanceof Uint8Array
@@ -136,14 +147,16 @@ export function createBatchWriter(
 
   return {
     // Každý řádek i bajty kontrolujeme interně; volající nemůže readback přeskočit.
-    writeBatch(writes: readonly BatchWrite[]): Promise<void> {
+    writeBatch(writes: readonly BatchChange[]): Promise<void> {
       let operations: ReturnType<typeof prepare>[];
       try {
         lifetime.signal.throwIfAborted();
         const seen = new Set<string>();
-        operations = Array.from(writes, ({ table, values }) => {
+        operations = Array.from(writes, (write) => {
+          const { table } = write;
           if (!Object.hasOwn(schema, table)) throw new Error('Neznámá tabulka.');
-          const operation = prepare(table, values);
+          const operation =
+            'delete' in write ? prepare(table, write.delete, true) : prepare(table, write.values);
           const key = `${table}:${operation.values.id}`;
           if (seen.has(key)) throw new Error('Dávka obsahuje opakované ID stejné tabulky.');
           seen.add(key);

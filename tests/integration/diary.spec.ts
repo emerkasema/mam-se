@@ -318,3 +318,22 @@ test('mapping refuses corrupt photos and oversized content before any diary writ
   expect(result.errors[1]).toMatch(/limit/);
   expect(result.counts).toEqual(Array.from({ length: 7 }, () => [{ count: 0 }]));
 });
+
+test('confirmed deletion and reinsertion with the same ID survive reload', async ({ page }) => {
+  await page.goto('./diary/');
+  await expect(page.locator('#status')).toHaveText(/^(Persisted|Unknown)$/);
+  await page.evaluate(async () => {
+    const { client, day, raw } = window.diary;
+    await client.writeBatch([day('delete-me')]);
+    // Runtime vstup dovolí RED ještě před rozšířením typového kontraktu writeru.
+    await client.writeBatch([{ table: 'day', delete: day('delete-me').values.id }] as never);
+    const rows = await raw("select isDeleted from day where legacyKey = 'delete-me'");
+    if (JSON.stringify(rows) !== '[{"isDeleted":1}]') throw new Error('Deletion was not confirmed');
+    await client.writeBatch([day('delete-me', '{"restored":true}')]);
+  });
+  await page.reload();
+  await expect(page.locator('#status')).toHaveText(/^(Persisted|Unknown)$/);
+  expect(await page.evaluate(() => window.diary.raw('select payload, isDeleted from day'))).toEqual(
+    [{ payload: '{"restored":true}', isDeleted: 0 }],
+  );
+});

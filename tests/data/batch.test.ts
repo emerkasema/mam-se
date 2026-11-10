@@ -21,7 +21,7 @@ function fixture(options: { complete?: boolean; rows?: unknown[] } = {}) {
       sends++;
       if (options.complete !== false) queueMicrotask(callbacks.onComplete);
     },
-    loadQuery: async () => options.rows ?? [write.values],
+    loadQuery: async () => options.rows ?? [{ ...write.values, isDeleted: 0 }],
   } as unknown as Evolu<DiarySchema>;
   return { errors, writer: createBatchWriter(evolu, errors), sends: () => sends };
 }
