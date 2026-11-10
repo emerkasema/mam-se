@@ -1,13 +1,6 @@
 import { readdir } from 'node:fs/promises';
-import { test as baseTest, expect } from '@playwright/test';
-
-// WebKit v ephemeral kontextu nemá OPFS; test persistence vyžaduje vlastní dočasný profil.
-const test = baseTest.extend({
-  context: async ({ playwright, browserName, baseURL }, use) => {
-    const context = await playwright[browserName].launchPersistentContext('', baseURL ? { baseURL } : {});
-    try { await use(context); } finally { await context.close(); }
-  },
-});
+import { expect } from '@playwright/test';
+import { test } from './browser.ts';
 
 test('client entry persists through reload without a relay', async ({ page }) => {
   const errors: string[] = [];

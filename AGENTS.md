@@ -35,7 +35,7 @@
 ## Stav při předání (10. 11. 2026)
 
 - Existuje Astro scaffold a přesunuté soubory v `src/app/` a `public/`. `src/app/uloziste.js` stále používá původní IndexedDB.
-- Evolu je nainstalované, ale **integrace, migrace, obnova identity a sync nejsou implementované ani ověřené**. Nejprve dokonči integrační gate prvního kroku plánu; neoznačuj celý krok 1 za hotový.
+- Samostatná klientská integrace Evolu je ověřená zápisem/čtením/reloadem, workery a WASM v Chromium/Firefox/WebKit. Testovací root `tests/integration/astro` není součástí produkční aplikace. **Produkční adaptér, migrace, obnova identity a sync stále nejsou implementované.** Pomocné moduly v `src/data/` nejsou zapojené do deníku; strukturální validace zálohy není kompletní `prepareImport`.
 - `scripts/build-sw.mjs` generuje manifest skutečných Astro assetů pro přechodný SW. Workbox, místní Fraunces a obnova konceptů čekají.
 - `check` kontroluje TS, nikoliv původní JS ani typy Astro šablon. `@astrojs/check` 0.9.12 podporuje TS 5/6, projekt má TS 7; nepoužívej `--force` / `--legacy-peer-deps`.
 - Pět cílových kroků plánu není tímto scaffoldem dokončeno. Stav ověř v ledgeru a Git historii. CI a šablony připrav pro GitLab; automatické nasazení nepřidávej.

@@ -50,7 +50,20 @@ Nasazuje se obsah `dist/`, nikoliv zdrojové soubory. Výchozí cesta je `/mam-s
 
 ## Stav technického základu
 
-Aplikace nyní používá Astro jako statickou obálku. Data se **stále ukládají původní implementací do IndexedDB**. Balíčky Evolu jsou připravené pro další práci, ale synchronizace, obnova identity a migrace na Evolu zatím nejsou implementované. Písmo Fraunces se stále načítá z Google Fonts. Podrobné instrukce pro agenta jsou v [AGENTS.md](AGENTS.md).
+Aplikace nyní používá Astro jako statickou obálku. Data se **stále ukládají původní implementací do IndexedDB**. Samostatná klientská integrace Evolu má browser testy zápisu, čtení, reloadu a dostupnosti workerů/WASM. Pomocné moduly v `src/data/` zatím nejsou zapojené do deníku; synchronizace, obnova identity a migrace na Evolu nejsou implementované. Písmo Fraunces se stále načítá z Google Fonts. Podrobné instrukce pro agenta jsou v [AGENTS.md](AGENTS.md).
+
+Samostatné integrační testy spustíš takto:
+
+```sh
+npm exec playwright -- install chromium firefox webkit
+npm run build:integration
+npm run test:integration
+```
+
+Testovací stránka se nedostane do produkčního `dist/`. Podrobnosti a hranice
+ověření popisuje [integrační README](tests/integration/README.md). Vizuální
+baseline obsahuje macOS/Chromium snímky; linuxový CI potřebuje vlastní ověřené
+snímky. Tyto testy nenahrazují kontrolu PWA na fyzickém telefonu.
 
 ## Licence a zdroje
 
