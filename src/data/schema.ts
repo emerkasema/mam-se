@@ -23,6 +23,11 @@ export const schema = {
 export type DiarySchema = typeof schema;
 export type TableName = keyof DiarySchema;
 
-export function createRowId<T extends TableName>(table: T, key: string) {
-  return schema[table].id.orThrow(createIdFromString(`mamse:v1:${table}:${key}`));
+export function createRowId<T extends TableName>(
+  table: T,
+  key: string,
+): DiarySchema[T]['id']['Output'] {
+  return schema[table].id.orThrow(
+    createIdFromString(`mamse:v1:${table}:${key}`),
+  ) as DiarySchema[T]['id']['Output'];
 }
