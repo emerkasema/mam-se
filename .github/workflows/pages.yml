@@ -1,0 +1,87 @@
+name: Pages (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-publication
+  cancel-in-progress: false
+
+jobs:
+  configuration:
+    # Bez úplného potvrzení cíle se nespustí ani čtení Pages konfigurace.
+    if: >-
+      vars.PAGES_DEPLOY_ENABLED == 'true' &&
+      vars.PAGES_DEPLOY_REPOSITORY == github.repository &&
+      vars.PAGES_DEPLOY_BRANCH != '' &&
+      vars.PAGES_SITE_URL != '' &&
+      github.ref == format('refs/heads/{0}', vars.PAGES_DEPLOY_BRANCH)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pages: read
+    outputs:
+      app_base: ${{ steps.base.outputs.app_base }}
+    steps:
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+        id: pages
+        with:
+          enablement: false
+      - name: Verify confirmed URL and normalize base
+        id: base
+        env:
+          PAGES_BASE_URL: ${{ steps.pages.outputs.base_url }}
+          PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          CONFIRMED_SITE_URL: ${{ vars.PAGES_SITE_URL }}
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import { appendFileSync } from 'node:fs';
+          const actual = new URL(process.env.PAGES_BASE_URL);
+          const confirmed = new URL(process.env.CONFIRMED_SITE_URL);
+          const normalized = (path) => `/${path.split('/').filter(Boolean).join('/')}${path.split('/').filter(Boolean).length ? '/' : ''}`;
+          for (const url of [actual, confirmed]) {
+            if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) {
+              throw new Error('Pages URL musí být potvrzená čistá HTTPS adresa.');
+            }
+          }
+          const base = normalized(process.env.PAGES_BASE_PATH);
+          if (actual.origin !== confirmed.origin || normalized(actual.pathname) !== normalized(confirmed.pathname) || normalized(actual.pathname) !== base) {
+            throw new Error('Potvrzená URL neodpovídá konfiguraci Pages.');
+          }
+          if (!/^\/(?:[A-Za-z0-9._~-]+\/)*$/.test(base)) {
+            throw new Error('Nepodporovaná Pages base.');
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `app_base=${base}\n`);
+          JS
+
+  checks:
+    needs: configuration
+    uses: ./.github/workflows/ci.yml
+    with:
+      app_base: ${{ needs.configuration.outputs.app_base }}
+      pages_artifact: true
+
+  deploy:
+    needs: [configuration, checks]
+    if: >-
+      vars.PAGES_DEPLOY_ENABLED == 'true' &&
+      vars.PAGES_DEPLOY_REPOSITORY == github.repository &&
+      vars.PAGES_DEPLOY_BRANCH != '' &&
+      vars.PAGES_SITE_URL != '' &&
+      github.ref == format('refs/heads/{0}', vars.PAGES_DEPLOY_BRANCH)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+        id: deployment
