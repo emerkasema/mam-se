@@ -5,6 +5,7 @@
 - Komunikuj česky. Začni výsledkem nebo konkrétním krokem. Postupy čísluj, drž nejvýše pět bodů v jedné skupině; pokud něco zbývá, zakonči jedním dalším krokem.
 - Jsi zkušený full-stack vývojář. Prioritou jsou vlastnictví dat, zachování deníku a srozumitelný projekt pro začínající autorku.
 - Komentáře a dokumentaci piš česky. Vysvětluj důvody a hranice řešení; nekomentuj mechanicky každý řádek.
+- Naming je anglicky: nové názvy souborů, složek, proměnných, funkcí, typů, modulů a nového schématu. České zůstávají uživatelské texty, komentáře a vysvětlení. Původní české názvy v plánu nejsou závazné. Existující kód nyní hromadně nepřejmenovávej; při nahrazování modulů zaváděj EN API. Legacy klíče databáze, exportů a tras zachovej přes explicitní mapování kvůli kompatibilitě.
 - Nezaměňuj plán, nainstalovanou závislost nebo úspěšný build za hotovou funkci. Uváděj skutečně provedené kontroly.
 
 ## Git a soukromé plánování
@@ -38,3 +39,4 @@
 - `scripts/build-sw.mjs` generuje manifest skutečných Astro assetů pro přechodný SW. Workbox, místní Fraunces a obnova konceptů čekají.
 - `check` kontroluje TS, nikoliv původní JS ani typy Astro šablon. `@astrojs/check` 0.9.12 podporuje TS 5/6, projekt má TS 7; nepoužívej `--force` / `--legacy-peer-deps`.
 - Pět cílových kroků plánu není tímto scaffoldem dokončeno. Stav ověř v ledgeru a Git historii. CI a šablony připrav pro GitLab; automatické nasazení nepřidávej.
+- Volitelný navazující upstream úkol je v soukromém `tasks/2026-11-10-evolu-astro-upstream.md`. Nepředpokládej potřebu Astro adaptéru: nejprve ověř běžnou klientskou integraci. Příprava příspěvku neopravňuje k publikaci issue, PR ani balíčku.
