@@ -3544,7 +3544,7 @@ window.addEventListener('hashchange', vykresli);
   }
   vykresli();
   // Offline provoz a instalace na plochu
-  if ('serviceWorker' in navigator) {
+  if (import.meta.env.PROD && 'serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 })();

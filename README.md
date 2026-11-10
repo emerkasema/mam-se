@@ -8,15 +8,15 @@ Osobní deník pohody. Webová aplikace (PWA), která běží v telefonu a všec
 
 | Soubor | K čemu je |
 | --- | --- |
-| `index.html` | Kostra stránky. Načte vzhled a program. |
-| `styl.css` | Vzhled: barvy (nahoře v `:root`), písmo, tlačítka, karty. |
-| `js/app.js` | Program: obrazovky, klepnutí, ukládání záznamu, pomoc. |
-| `js/slovniky.js` | Slova, která aplikace nabízí: emoce, tělo, potřeby, činnosti. Tady se slova přidávají a opravují. |
-| `js/oslava.js` | Animace oslav (konfety, deka, drink…). |
-| `js/uloziste.js` | Ukládání do telefonu (IndexedDB), záloha a obnova. |
-| `sw.js` | Díky němu aplikace funguje i bez internetu. **Po každé změně souborů zvyš číslo `VERZE`.** |
-| `manifest.webmanifest` | Název a ikony pro přidání na plochu. |
-| `ikony/`, `fonty/` | Logo, ikony aplikace a písmo Inter. |
+| `src/pages/index.astro` | Kostra stránky. Načte vzhled a program. |
+| `public/styl.css` | Vzhled: barvy (nahoře v `:root`), písmo, tlačítka, karty. |
+| `src/app/app.js` | Program: obrazovky, klepnutí, ukládání záznamu, pomoc. |
+| `src/app/slovniky.js` | Slova, která aplikace nabízí: emoce, tělo, potřeby, činnosti. Tady se slova přidávají a opravují. |
+| `src/app/oslava.js` | Animace oslav (konfety, deka, drink…). |
+| `src/app/uloziste.js` | Ukládání do telefonu (IndexedDB), záloha a obnova. |
+| `scripts/build-sw.mjs` | Při buildu vytvoří service worker a manifest skutečných souborů. Verze cache vzniká z obsahu automaticky. |
+| `public/manifest.webmanifest` | Název a ikony pro přidání na plochu. |
+| `public/ikony/`, `public/fonty/` | Logo, ikony aplikace a písmo Inter. |
 
 ## Kam se co ukládá
 
@@ -26,7 +26,31 @@ Osobní deník pohody. Webová aplikace (PWA), která běží v telefonu a všec
 
 ## Jak vyzkoušet změny
 
-Po úpravě souborů je nahraj na GitHub znovu (stejně jako poprvé). Zvyš číslo `VERZE` v `sw.js`, jinak si telefon může chvíli držet starou verzi. Telefon pak stačí zavřít a otevřít aplikaci znovu.
+Potřebuješ Node podle `.node-version` a npm podle `package.json`.
+
+1. Nainstaluj závislosti: `npm ci`.
+2. Spusť vývoj: `npm run dev`.
+3. Otevři vypsanou adresu s cestou `/mam-se/`.
+
+Před předáním změny spusť:
+
+```sh
+npm run check
+npm run build
+npm test
+npm exec playwright -- install chromium
+npm run test:e2e
+```
+
+`npm test` kontroluje výstup buildu, proto build spouštěj první. Browser testy používají syntetický deník a ověřují uložení, reload, offline otevření a navigaci. `check` zatím kontroluje pouze TypeScript soubory; původní JS a typy `.astro` šablon nepokrývá.
+
+`npm run preview` otevře hotový build se service workerem. V režimu `dev` se service worker neregistruje. Pokud Astro pod agentem spustí preview na pozadí, ukončíš jej `npm exec astro -- preview stop`.
+
+Nasazuje se obsah `dist/`, nikoliv zdrojové soubory. Výchozí cesta je `/mam-se/`; pro kořen webu nastav `PUBLIC_APP_BASE=/` při buildu i preview/testu. Před skutečným nasazením potvrď původní doménu — místní data jsou vázaná na origin prohlížeče.
+
+## Stav technického základu
+
+Aplikace nyní používá Astro jako statickou obálku. Data se **stále ukládají původní implementací do IndexedDB**. Balíčky Evolu jsou připravené pro další práci, ale synchronizace, obnova identity a migrace na Evolu zatím nejsou implementované. Písmo Fraunces se stále načítá z Google Fonts. Podrobné instrukce pro agenta jsou v [AGENTS.md](AGENTS.md).
 
 ## Licence a zdroje
 

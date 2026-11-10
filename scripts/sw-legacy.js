@@ -2,8 +2,8 @@
 // SERVICE WORKER – díky němu aplikace funguje i bez internetu.
 // Uloží si soubory aplikace (ne Tvoje data – ta jsou v IndexedDB).
 //
-// DŮLEŽITÉ: Po každé změně souborů aplikace zvyš číslo VERZE níže.
-// Telefony tak poznají, že si mají stáhnout novou verzi.
+// Přechodná šablona: build-sw.mjs nahradí VERZE a SOUBORY podle buildu.
+// Ručně je neměň; finální Workbox integrace přijde v dalším kroku.
 // =====================================================================
 
 const VERZE = 'mamse-v0.7.0';
