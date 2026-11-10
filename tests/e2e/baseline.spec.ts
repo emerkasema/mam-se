@@ -1,6 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { legacyFixture } from '../fixtures/legacy.ts';
 
+// Fixní okamžik nestačí: UI používá místní datum i čas.
+test.use({ timezoneId: 'Europe/Prague' });
+
 for (const width of [390, 1280]) {
   test(`upstream visual baseline ${width}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
@@ -37,6 +40,13 @@ for (const width of [390, 1280]) {
     for (const [name, route] of routes) {
       await page.goto(`./#/${route}`);
       await expect(page.locator('main')).toBeVisible();
+      if (name === 'home') await expect(page.getByRole('heading', { name: 'Jak se máš?', exact: true })).toBeVisible();
+      if (name === 'entry') await expect(page.locator('#text')).toBeVisible();
+      if (name === 'detail') await expect(page.locator('[data-akce="smazatZaznam"]')).toBeVisible();
+      if (name === 'evening') await expect(page.getByRole('heading', { name: 'Co jsi dnes dělala/dělal?', exact: true })).toBeVisible();
+      if (name === 'week') await expect(page.getByRole('heading', { name: 'Tvůj týden', exact: true })).toBeVisible();
+      if (name === 'overview') await expect(page.getByRole('heading', { name: 'Můj přehled', exact: true })).toBeVisible();
+      if (name === 'settings') await expect(page.getByRole('heading', { name: 'Záloha', exact: true })).toBeVisible();
       await expect(page).toHaveScreenshot(`${name}-${width}.png`, { fullPage: true, animations: 'disabled', maxDiffPixels: 50 });
     }
   });
