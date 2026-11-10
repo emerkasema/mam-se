@@ -11,7 +11,9 @@
 // =====================================================================
 
 import * as S from './slovniky.js';
-import * as U from './uloziste.js';
+import * as storage from '../data/storage.ts';
+let U = storage;
+let storageReady = false;
 import { spustOslavu, ANIMACE_PODLE_SKUPINY } from './oslava.js';
 
 const app = document.getElementById('app');
@@ -58,7 +60,7 @@ function dnesniDatumText() {
 function popisCasu(z) {
   if (z.typ !== 'vecerni') return casZaznamu(z.chvile_od);
   const datum = z.chvile_od.slice(0, 10);
-  if (datum === U.datumDne()) return 'dnes · večerní ohlédnutí';
+  if (datum === U.dayDate()) return 'dnes · večerní ohlédnutí';
   const d = new Date(datum + 'T12:00:00');
   return d.getDate() + '. ' + (d.getMonth() + 1) + '. · večerní ohlédnutí';
 }
@@ -66,7 +68,7 @@ function popisCasu(z) {
 function casZaznamu(iso) {
   const d = new Date(iso);
   const cas = d.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
-  if (U.datumDne(d) === U.datumDne()) return 'dnes ' + cas;
+  if (U.dayDate(d) === U.dayDate()) return 'dnes ' + cas;
   return d.getDate() + '. ' + (d.getMonth() + 1) + '. ' + cas;
 }
 
@@ -144,8 +146,8 @@ function cip(text, zapnuto, akce, data = {}) {
 
 function novyKoncept() {
   return {
-    id: U.noveId(),
-    vytvoreno: U.tedS(),
+    id: U.newId(),
+    vytvoreno: U.timestamp(),
     prijemnost: null,
     text: '',
     zdroj: { psano: false, diktovano: false },
@@ -192,6 +194,8 @@ function sestavZaznam(k) {
   else if (k.zdroj.psano) zdroj = 'psano';
 
   return {
+    // Doplňování mění známá pole, ostatní obsah původního záznamu zachovává.
+    ...k.originalRecord,
     id: k.id,
     typ: k.typ || 'okamzity',
     vytvoreno: k.vytvoreno,
@@ -353,7 +357,7 @@ function radekSeznamu(polozka) {
   const bloky = polozka.zaznamy.filter(z => z.poradi != null).sort((a, b) => a.poradi - b.poradi);
   const doplneni = polozka.zaznamy.filter(z => z.poradi == null);
   const d = new Date(polozka.datum + 'T12:00:00');
-  const kdy = polozka.datum === U.datumDne() ? 'dnes' : d.getDate() + '. ' + (d.getMonth() + 1) + '.';
+  const kdy = polozka.datum === U.dayDate() ? 'dnes' : d.getDate() + '. ' + (d.getMonth() + 1) + '.';
   const radky = bloky.map(z => '<li>' + h(z.popis_bloku || (z.cinnost || []).join(' + ') || 'blok') +
     (z.chvile_delka_min ? ' <span class="tlumene">· ' + h(delkaText(z.chvile_delka_min)) + '</span>' : '') +
     (z.prijemnost != null ? ' <span class="tlumene">· ' + (z.prijemnost > 0 ? '+' + z.prijemnost : z.prijemnost) + '</span>' : '') + '</li>').join('') +
@@ -372,11 +376,11 @@ function nazevTydne(pondeli) {
 }
 
 async function obrazovkaDomov() {
-  const vse = (await U.vsechnyZaznamy()).sort((a, b) => (b.upraveno || b.vytvoreno).localeCompare(a.upraveno || a.vytvoreno));
+  const vse = (await U.getEntries()).sort((a, b) => (b.upraveno || b.vytvoreno).localeCompare(a.upraveno || a.vytvoreno));
 
   const denVecera = await denKOhlednuti();
   const jeVcera = denVecera !== denOhlednuti();
-  const dnesDen = await U.nactiDen(denVecera);
+  const dnesDen = await U.getDay(denVecera);
   const dnesVecer = !!(dnesDen && dnesDen.vecerni_hotovo);
 
   // Tento týden (pondělí až neděle)
@@ -389,11 +393,11 @@ async function obrazovkaDomov() {
   for (let i = 0; i < 7; i++) {
     const den = new Date(pondeli);
     den.setDate(pondeli.getDate() + i);
-    const datum = U.datumDne(den);
+    const datum = U.dayDate(den);
     const pocet = vse.filter(z => z.chvile_od.slice(0, 10) === datum).length;
-    const jeDnes = datum === U.datumDne();
-    const budouci = datum > U.datumDne();
-    const den_ = await U.nactiDen(datum);
+    const jeDnes = datum === U.dayDate();
+    const budouci = datum > U.dayDate();
+    const den_ = await U.getDay(datum);
     const barva = nastaveni.barva_dne_zapnuta && den_ && den_.barva;
     let styl = '';
     if (barva) styl = ' style="background:' + barva + ';color:' + inkoustPro(barva) + ';border-color:' + barva + '"';
@@ -408,7 +412,7 @@ async function obrazovkaDomov() {
   // Týdenní ohlédnutí: nabídka jednou týdně (v neděli za tento týden, jinak za minulý),
   // jen když v tom týdnu nějaké záznamy jsou a ohlédnutí ještě není hotové ani odložené.
   const kodT = tydenKOhlednuti();
-  const ulozT = await U.nactiTyden(kodT);
+  const ulozT = await U.getWeek(kodT);
   const rT = rozsahTydne(kodT);
   const maZaznamy = vse.some(z => { const d = z.chvile_od.slice(0, 10); return d >= rT.od && d <= rT.do; });
   const kartaTydne = maZaznamy && !(ulozT && (ulozT.vyplneno || ulozT.odlozeno))
@@ -419,7 +423,7 @@ async function obrazovkaDomov() {
     : '';
 
   // Posledních pět položek. Večerní ohlédnutí jednoho dne = jeden balíček.
-  const tydny = (await U.vsechnyTydny()).filter(t => t.vyplneno);
+  const tydny = (await U.getWeeks()).filter(t => t.vyplneno);
   const seznam = polozkySeznamu(vse, tydny).slice(0, 5).map(radekSeznamu).join('');
 
   const rozepsano = maObsah(koncept) && !koncept.ulozeno
@@ -821,8 +825,8 @@ function inkoustPro(hex) { return svetlost(hex) < 0.18 ? '#F7F2EA' : '#1F2A26'; 
 
 async function obrazovkaDen(datum) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(datum || '')) return '<main class="obsah"><h1>Den nenalezen</h1><a class="tlacitko" href="#/domov">Domů</a></main>';
-  const den = (await U.nactiDen(datum)) || { datum, barva: null, vecerni_hotovo: false, poznamka: '' };
-  const zaznamy = (await U.vsechnyZaznamy()).filter(z => z.chvile_od.slice(0, 10) === datum)
+  const den = (await U.getDay(datum)) || { datum, barva: null, vecerni_hotovo: false, poznamka: '' };
+  const zaznamy = (await U.getEntries()).filter(z => z.chvile_od.slice(0, 10) === datum)
     .sort((a, b) => (a.typ === 'vecerni') - (b.typ === 'vecerni') || a.chvile_od.localeCompare(b.chvile_od) || (a.poradi ?? 99) - (b.poradi ?? 99));
   const d = new Date(datum + 'T12:00:00');
   let nazev = new Intl.DateTimeFormat('cs-CZ', { weekday: 'long', day: 'numeric', month: 'long' }).format(d);
@@ -830,7 +834,7 @@ async function obrazovkaDen(datum) {
 
   let barvy = '';
   if (nastaveni.barva_dne_zapnuta) {
-    barvy = '<section class="karta"><h2>Jakou barvu ' + (datum === U.datumDne() ? 'má' : 'měl') + ' Tvůj den?</h2>' +
+    barvy = '<section class="karta"><h2>Jakou barvu ' + (datum === U.dayDate() ? 'má' : 'měl') + ' Tvůj den?</h2>' +
       paletaBarev(datum, den.barva) +
       '<div class="odkazy"><label class="tlacitko obrys male-t" style="cursor:pointer">Jiná barva…' +
         '<input type="color" class="skryte" data-akce="barvaVlastni" data-datum="' + datum + '" value="' + (den.barva || '#72B97F') + '"></label>' +
@@ -873,7 +877,7 @@ let vecer = null; // rozpracované ohlédnutí (jen v paměti, ukládá se po kr
 function denOhlednuti() {
   const d = new Date();
   if (d.getHours() < 4) d.setDate(d.getDate() - 1);
-  return U.datumDne(d);
+  return U.dayDate(d);
 }
 
 // Který den otevřít pod „Večerní ohlédnutí“: dopoledne (do 13 h) včerejšek,
@@ -884,22 +888,22 @@ async function denKOhlednuti() {
   const ted = new Date();
   if (ted.getHours() < 4 || ted.getHours() >= 13) return dnes;
   const v = new Date(dnes + 'T12:00:00'); v.setDate(v.getDate() - 1);
-  const vcera = U.datumDne(v);
-  const den = await U.nactiDen(vcera);
+  const vcera = U.dayDate(v);
+  const den = await U.getDay(vcera);
   if (den && den.vecerni_hotovo) return dnes;
-  const pouzivaUz = (await U.vsechnyZaznamy()).some(z => z.chvile_od.slice(0, 10) <= vcera);
+  const pouzivaUz = (await U.getEntries()).some(z => z.chvile_od.slice(0, 10) <= vcera);
   return pouzivaUz ? vcera : dnes;
 }
 
 function novyBlok() {
-  return { id: U.noveId(), vytvoreno: U.tedS(), popis: '', cinnost: [], delkaMin: null, sKym: [], kde: null,
+  return { id: U.newId(), vytvoreno: U.timestamp(), popis: '', cinnost: [], delkaMin: null, sKym: [], kde: null,
     hodnotit: false, prijemnost: null, text: '', smysluplnost: null, vyzkum: {}, ulozeny: false };
 }
 
 // Načte ohlédnutí daného dne (když už bylo uložené, jde ho upravit).
 async function pripravVecer(datum) {
   if (vecer && vecer.datum === datum) return;
-  const zaznamy = (await U.vsechnyZaznamy())
+  const zaznamy = (await U.getEntries())
     .filter(z => z.typ === 'vecerni' && z.poradi != null && z.chvile_od.slice(0, 10) === datum)
     .sort((a, b) => a.poradi - b.poradi);
   vecer = {
@@ -916,11 +920,11 @@ async function pripravVecer(datum) {
       ulozeny: true, puvodni: z
     }))
   };
-  const den = await U.nactiDen(datum);
+  const den = await U.getDay(datum);
   if (vecer.bloky.length && den && den.vecerni_hotovo) vecer.krok = 'shrnuti';
   if (!vecer.bloky.length) {
     // Je k dispozici rozvrh z některého dřívějšího dne? Pak se nejdřív zeptáme.
-    const drivejsi = (await U.vsechnyZaznamy())
+    const drivejsi = (await U.getEntries())
       .filter(z => z.typ === 'vecerni' && z.poradi != null && z.chvile_od.slice(0, 10) < datum)
       .map(z => z.chvile_od.slice(0, 10)).sort();
     const dny = [...new Set(drivejsi)];
@@ -962,12 +966,17 @@ function vyberChvile() {
 
 // Uloží všechny bloky jako záznamy (nové přidá, upravené přepíše).
 async function ulozVecer(hotovo = true) {
-  const zacatekDne = U.tedS(new Date(vecer.datum + 'T00:00:00'));
-  for (let i = 0; i < vecer.bloky.length; i++) {
-    const b = vecer.bloky[i];
+  const evening = vecer;
+  const revision = evening.revision || 0;
+  const deletionQueue = evening.smazane || [];
+  const deleted = [...deletionQueue];
+  const zacatekDne = U.timestamp(new Date(evening.datum + 'T00:00:00'));
+  const entries = [];
+  for (let i = 0; i < evening.bloky.length; i++) {
+    const b = evening.bloky[i];
     const zaklad = b.puvodni || {};
     const zaznam = Object.assign({}, zaklad, {
-      id: b.id, typ: 'vecerni', vytvoreno: b.vytvoreno, upraveno: b.ulozeny ? U.tedS() : null,
+      id: b.id, typ: 'vecerni', vytvoreno: b.vytvoreno, upraveno: b.ulozeny ? U.timestamp() : null,
       chvile_od: zacatekDne, chvile_delka_min: b.delkaMin, poradi: i,
       prijemnost: b.hodnotit ? b.prijemnost : null,
       vlastni_slova: b.hodnotit ? b.text.trim() : '',
@@ -979,15 +988,33 @@ async function ulozVecer(hotovo = true) {
       zdroj_textu: b.text.trim() ? (zaklad.zdroj_textu || 'psano') : null,
       verze_protokolu: S.VERZE_PROTOKOLU
     });
-    await U.ulozZaznam(zaznam);
-    b.ulozeny = true; b.puvodni = zaznam;
+    entries.push(zaznam);
   }
-  // Bloky, které člověk odebral, smažeme.
-  for (const id of vecer.smazane || []) await U.smazZaznam(id);
-  vecer.smazane = [];
-  const den = (await U.nactiDen(vecer.datum)) || { datum: vecer.datum, barva: null, vecerni_hotovo: false, poznamka: '' };
+  const savedEntries = structuredClone(entries);
+  // Bloky, smazané položky i dokončení dne se potvrdí v jedné dávce.
+  const den = (await U.getDay(evening.datum)) || { datum: evening.datum, barva: null, vecerni_hotovo: false, poznamka: '' };
   if (hotovo) den.vecerni_hotovo = true;
-  await U.ulozDen(den);
+  await U.saveEveningBatch(savedEntries, den, deleted);
+  // Potvrzení se váže k zachycenému večeru a ID, nikoli k pořadí nebo nové
+  // globální obrazovce. Pozdější úpravy bloků a čekající mazání nepřepisujeme.
+  if (evening.smazane === deletionQueue) deletionQueue.splice(0, deleted.length);
+  const currentBlocks = new Map(evening.bloky.map(block => [block.id, block]));
+  for (const entry of savedEntries) {
+    const block = currentBlocks.get(entry.id);
+    if (block) { block.ulozeny = true; block.puvodni = entry; }
+    else (evening.smazane ||= []).push(entry.id);
+  }
+  return { evening, revision };
+}
+
+function confirmEveningView(saved) {
+  if (vecer !== saved.evening) return false;
+  if ((vecer.revision || 0) !== saved.revision) {
+    oznam('Předchozí stav je uložený. Nové změny ještě ulož.');
+    prekresli();
+    return false;
+  }
+  return true;
 }
 
 const MAX_CINNOSTI = 2;
@@ -1036,7 +1063,7 @@ function hlavickaVecera(nazev, zpet) {
 }
 
 function nazevDneVecera() {
-  if (vecer.datum === U.datumDne()) return 'Večerní ohlédnutí';
+  if (vecer.datum === U.dayDate()) return 'Večerní ohlédnutí';
   const d = new Date(vecer.datum + 'T12:00:00');
   const den = new Intl.DateTimeFormat('cs-CZ', { weekday: 'long' }).format(d);
   return 'Ohlédnutí · ' + d.getDate() + '. ' + (d.getMonth() + 1) + '. · ' + den;
@@ -1097,7 +1124,7 @@ async function obrazovkaVecer(parametr) {
       ? '<button type="button" class="tlacitko obrys" style="align-self:flex-start" data-akce="blokNovy">+ Přidat další blok</button>' : '';
     return hlavickaVecera(nazevDneVecera(), '#/domov') +
       '<main class="obsah">' +
-        '<div><h1 style="font-size:26px">Co jsi ' + (v.datum === U.datumDne() ? 'dnes' : 'ten den') + ' ' + tvar('dělala', 'dělal') + '?</h1>' +
+        '<div><h1 style="font-size:26px">Co jsi ' + (v.datum === U.dayDate() ? 'dnes' : 'ten den') + ' ' + tvar('dělala', 'dělal') + '?</h1>' +
         '<p class="tlumene">Rozlož si den do bloků, jak šly po sobě. Stačí zhruba. Noční spánek se nezapisuje.</p></div>' +
         nacist +
         (seznam ? '<div class="seznam" id="seznam-bloku">' + seznam + '</div>' +
@@ -1167,9 +1194,9 @@ async function obrazovkaVecer(parametr) {
 
   // ---- 3. barva dne ----
   if (v.krok === 'barva') {
-    const den = (await U.nactiDen(v.datum)) || {};
+    const den = (await U.getDay(v.datum)) || {};
     return hlavickaVecera(nazevDneVecera(), '#/vecer/' + v.datum) +
-      '<main class="obsah"><section class="karta"><h1 style="font-size:26px">Jakou barvu ' + (v.datum === U.datumDne() ? 'má' : 'měl') + ' Tvůj den?</h1>' +
+      '<main class="obsah"><section class="karta"><h1 style="font-size:26px">Jakou barvu ' + (v.datum === U.dayDate() ? 'má' : 'měl') + ' Tvůj den?</h1>' +
         paletaBarev(v.datum, den.barva) +
         '<div class="odkazy"><label class="tlacitko obrys male-t" style="cursor:pointer">Jiná barva…' +
           '<input type="color" class="skryte" data-akce="barvaVlastni" data-datum="' + v.datum + '" value="' + (den.barva || '#72B97F') + '"></label>' +
@@ -1182,7 +1209,7 @@ async function obrazovkaVecer(parametr) {
   }
 
   // ---- 4. shrnutí ----
-  const den = (await U.nactiDen(v.datum)) || {};
+  const den = (await U.getDay(v.datum)) || {};
   const celkem = v.bloky.reduce((s, b) => s + (b.delkaMin || 0), 0);
   const hodnocene = v.bloky.filter(b => b.hodnotit && b.prijemnost != null);
   const cas = { prijemny: 0, neutralni: 0, neprijemny: 0 };
@@ -1196,7 +1223,7 @@ async function obrazovkaVecer(parametr) {
     (b.text.trim() ? ' – „' + h(b.text.trim().slice(0, 60)) + (b.text.trim().length > 60 ? '…' : '') + '“' : '') + '</li>').join('');
 
   // Všechny záznamy toho dne – okamžité i večerní (kvůli fotkám a průběhu dne)
-  const zaznamyDne = (await U.vsechnyZaznamy()).filter(z => z.chvile_od.slice(0, 10) === v.datum);
+  const zaznamyDne = (await U.getEntries()).filter(z => z.chvile_od.slice(0, 10) === v.datum);
   const okamzite = zaznamyDne.filter(z => z.typ !== 'vecerni' && z.typ !== 'oslava').sort((a, b) => a.chvile_od.localeCompare(b.chvile_od));
   const oslavyDne = zaznamyDne.filter(z => z.typ === 'oslava').sort((a, b) => a.chvile_od.localeCompare(b.chvile_od));
   const sFotkou = [...okamzite, ...zaznamyDne.filter(z => z.typ === 'vecerni')].filter(z => z.fotka);
@@ -1677,7 +1704,7 @@ let sdileniOslavy = null; // sdílení jedné oslavy (obrázek s textem)
 let posledniOslava = null; // naposledy uložená oslava – aby šla hned sdílet
 
 function novaOslava(zpet, datum) {
-  return { id: U.noveId(), vytvoreno: U.tedS(), datum: datum || U.datumDne(), zpet: zpet || '#/domov',
+  return { id: U.newId(), vytvoreno: U.timestamp(), datum: datum || U.dayDate(), zpet: zpet || '#/domov',
     text: '', potreby: {}, otevrenaSkupina: null, vlastniPotreba: false, podekovani: '', ulozena: false };
 }
 
@@ -1691,7 +1718,7 @@ function oslavaZeZaznamu(z, zpet) {
 // Barva dne pro animaci (jen když je barva dne zapnutá a zvolená).
 async function barvaDneK(datum) {
   if (!nastaveni.barva_dne_zapnuta) return null;
-  const den = await U.nactiDen(datum);
+  const den = await U.getDay(datum);
   return den && den.barva ? den.barva : null;
 }
 
@@ -1761,9 +1788,9 @@ function obrazovkaOslava() {
 
 async function ulozOslavu() {
   const o = oslava;
-  const kdy = o.datum === U.datumDne() ? (o.puvodni ? o.puvodni.chvile_od : U.tedS()) : U.tedS(new Date(o.datum + 'T20:00:00'));
+  const kdy = o.datum === U.dayDate() ? (o.puvodni ? o.puvodni.chvile_od : U.timestamp()) : U.timestamp(new Date(o.datum + 'T20:00:00'));
   const zaznam = Object.assign({}, o.puvodni || {}, {
-    id: o.id, typ: 'oslava', vytvoreno: o.vytvoreno, upraveno: o.ulozena ? U.tedS() : null,
+    id: o.id, typ: 'oslava', vytvoreno: o.vytvoreno, upraveno: o.ulozena ? U.timestamp() : null,
     chvile_od: kdy, chvile_delka_min: null, poradi: null, smysluplnost: null,
     prijemnost: null, vlastni_slova: o.text.trim(), podekovani: o.podekovani.trim(),
     emoce: [], telo: [], strategie: '', prosba: '', cinnost: [], s_kym: [], kde: null, vyzkum: null,
@@ -1772,7 +1799,7 @@ async function ulozOslavu() {
     zdroj_textu: o.text.trim() ? 'psano' : null,
     verze_protokolu: S.VERZE_PROTOKOLU
   });
-  await U.ulozZaznam(zaznam);
+  await U.saveEntry(zaznam);
   o.ulozena = true; o.puvodni = zaznam;
   return zaznam;
 }
@@ -1928,7 +1955,7 @@ async function obrazovkaSdiletOslavu() {
 
 // ---------------- DETAIL ZÁZNAMU ----------------
 async function obrazovkaDetail(id) {
-  const z = await U.nactiZaznam(id);
+  const z = await U.getEntry(id);
   if (!z) return '<main class="obsah"><h1>Záznam nenalezen</h1><a class="tlacitko" href="#/domov">Domů</a></main>';
 
   const radek = (nadpis, obsah) => obsah ? '<div style="display:flex;flex-direction:column;gap:4px"><span class="panel-nadpis">' + nadpis + '</span><div>' + obsah + '</div></div>' : '';
@@ -1988,7 +2015,8 @@ function konceptZeZaznamu(z) {
   const k = novyKoncept();
   Object.assign(k, {
     id: z.id, vytvoreno: z.vytvoreno, upraveno: z.upraveno, ulozeno: true,
-    typ: z.typ || 'okamzity', chvileOd: z.typ === 'vecerni' ? z.chvile_od : null,
+    originalRecord: z,
+    typ: z.typ || 'okamzity', chvileOd: z.chvile_od,
     poradi: z.poradi ?? null, delkaMin: z.chvile_delka_min ?? null, smysluplnost: z.smysluplnost ?? null,
     prijemnost: z.prijemnost, text: z.vlastni_slova || '',
     zdroj: { psano: z.zdroj_textu === 'psano' || z.zdroj_textu === 'obe', diktovano: z.zdroj_textu === 'diktovano' || z.zdroj_textu === 'obe' },
@@ -2215,7 +2243,7 @@ function pondeliZKodu(kod) {
 function rozsahTydne(kod) {
   const od = pondeliZKodu(kod), konec = new Date(od); konec.setDate(od.getDate() + 6);
   const f = d => d.getDate() + '. ' + (d.getMonth() + 1) + '.';
-  return { od: U.datumDne(od), do: U.datumDne(konec), text: f(od) + ' – ' + f(konec) };
+  return { od: U.dayDate(od), do: U.dayDate(konec), text: f(od) + ' – ' + f(konec) };
 }
 // Za který týden se ohlížet: v neděli za ten právě končící, jinak za minulý.
 function tydenKOhlednuti() {
@@ -2254,9 +2282,9 @@ function skorWho5(odpovedi) {
 let tyden = null; // rozpracované týdenní ohlédnutí
 
 async function pripravTyden(kod) {
-  const ulozeny = await U.nactiTyden(kod);
-  const vse = await U.vsechnyZaznamy();
-  const tydny = (await U.vsechnyTydny()).filter(t => t.tyden < kod && t.who5).sort((a, b) => b.tyden.localeCompare(a.tyden));
+  const ulozeny = await U.getWeek(kod);
+  const vse = await U.getEntries();
+  const tydny = (await U.getWeeks()).filter(t => t.tyden < kod && t.who5).sort((a, b) => b.tyden.localeCompare(a.tyden));
   const minuly = tydny[0] || null;               // poslední vyplněné WHO-5
   const who5Minule = !!(minuly && minuly.tyden === predchoziTyden(kod));
   // Běžný stav = průměr až 4 předchozích týdnů, které mají ohodnocený čas.
@@ -2277,8 +2305,8 @@ async function pripravTyden(kod) {
     ulozeny: ulozeny || null
   };
   const r = tyden.data.rozsah;
-  for (let d = new Date(r.od + 'T12:00:00'); U.datumDne(d) <= r.do; d.setDate(d.getDate() + 1)) {
-    const den = await U.nactiDen(U.datumDne(d));
+  for (let d = new Date(r.od + 'T12:00:00'); U.dayDate(d) <= r.do; d.setDate(d.getDate() + 1)) {
+    const den = await U.getDay(U.dayDate(d));
     if (den && den.barva) tyden.barvyDnu.push(den.barva);
   }
 }
@@ -2365,7 +2393,7 @@ function kategorieBloku(z) {
 // a příjemný/nepříjemný čas. Jen když je dost dat (aspoň 3 chvíle s tou věcí).
 function souvislosti(vse) {
   const od = new Date(); od.setDate(od.getDate() - 28);
-  const bloky = vse.filter(z => z.typ === 'vecerni' && z.poradi != null && kategorieBloku(z) && z.chvile_od >= U.tedS(od));
+  const bloky = vse.filter(z => z.typ === 'vecerni' && z.poradi != null && kategorieBloku(z) && z.chvile_od >= U.timestamp(od));
   if (bloky.length < 8) return { malo: true, vety: [] };
   const celkem = { prijemny: 0, neprijemny: 0 };
   for (const b of bloky) { const k = kategorieBloku(b); if (k in celkem) celkem[k]++; }
@@ -2399,9 +2427,9 @@ function nejcastejsi(polozky, n = 8) {
 }
 
 async function obrazovkaPrehled() {
-  const vse = await U.vsechnyZaznamy();
-  const tydny = (await U.vsechnyTydny()).filter(t => t.vyplneno);
-  const dnes = U.datumDne();
+  const vse = await U.getEntries();
+  const tydny = (await U.getWeeks()).filter(t => t.vyplneno);
+  const dnes = U.dayDate();
 
   // --- kalendář měsíce ---
   const prvni = new Date(); prvni.setHours(12, 0, 0, 0); prvni.setDate(1); prvni.setMonth(prvni.getMonth() + prehled.mesic);
@@ -2412,9 +2440,9 @@ async function obrazovkaPrehled() {
   let kal = ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne'].map(x => '<span class="kal-hlava">' + x + '</span>').join('');
   for (let d = new Date(start); ; d.setDate(d.getDate() + 1)) {
     if (d.getMonth() !== prvni.getMonth() && d > prvni && d.getDay() === 1) break;
-    const datum = U.datumDne(d);
+    const datum = U.dayDate(d);
     if (d.getMonth() !== prvni.getMonth()) { kal += '<span></span>'; continue; }
-    const den = await U.nactiDen(datum);
+    const den = await U.getDay(datum);
     const barva = nastaveni.barva_dne_zapnuta && den && den.barva;
     const pocet = poctyDnu.get(datum) || 0;
     const budouci = datum > dnes;
@@ -2429,7 +2457,7 @@ async function obrazovkaPrehled() {
   let kartaDne = '';
   if (prehled.den) {
     const datum = prehled.den, d = new Date(datum + 'T12:00:00');
-    const den = await U.nactiDen(datum);
+    const den = await U.getDay(datum);
     const barva = nastaveni.barva_dne_zapnuta && den && den.barva;
     const zaz = vse.filter(z => z.chvile_od.slice(0, 10) === datum);
     const bloky = zaz.filter(z => z.typ === 'vecerni' && z.poradi != null);
@@ -2482,7 +2510,7 @@ async function obrazovkaPrehled() {
 
   // --- nejčastější slova za 30 dní ---
   const od30 = new Date(); od30.setDate(od30.getDate() - 30);
-  const posledni = vse.filter(z => z.chvile_od >= U.tedS(od30));
+  const posledni = vse.filter(z => z.chvile_od >= U.timestamp(od30));
   const emoce = nejcastejsi(posledni.flatMap(z => (z.emoce || []).map(e => e.slovo)));
   const telo = nejcastejsi(posledni.flatMap(z => (z.telo || []).map(t => t.pocit)));
   const potrebyMapa = new Map();
@@ -2642,7 +2670,7 @@ function casyPripominky() {
   const [hod, min] = (nastaveni.pripominka_cas || '19:30').split(':').map(Number);
   const zacatek = new Date(); zacatek.setHours(hod, min, 0, 0);
   const konec = new Date(zacatek.getTime() + 10 * 60000);
-  const f = d => U.tedS(d).slice(0, 19).replace(/[-:]/g, ''); // 20261106T193000
+  const f = d => U.timestamp(d).slice(0, 19).replace(/[-:]/g, ''); // 20261106T193000
   return { od: f(zacatek), do: f(konec) };
 }
 
@@ -2680,7 +2708,7 @@ function souborIcs() {
 // ---------------- NASTAVENÍ ----------------
 async function obrazovkaNastaveni() {
   const n = nastaveni;
-  const odkliknuta = await U.vsechnaDoporuceni();
+  const odkliknuta = await U.getRecommendations();
   const volba = (hodnota, text) => '<label class="prepinac-maly" style="font-size:15px"><input type="radio" name="osloveni" value="' + hodnota + '" data-akce="osloveni"' +
     (n.tvar_osloveni === hodnota ? ' checked' : '') + '>' + text + '</label>';
 
@@ -2730,7 +2758,7 @@ async function obrazovkaNastaveni() {
           : '<button type="button" class="tlacitko obrys male-t" style="align-self:flex-start" data-akce="smazat">Smazat všechna data</button>') +
       '</section>' +
       '<section class="karta"><h2>O aplikaci</h2>' +
-        '<p class="tlumene male">Mám se! · verze ' + h(U.VERZE_APLIKACE) + ' (první prototyp). Není zdravotnický prostředek a nenahrazuje odbornou pomoc.</p>' +
+        '<p class="tlumene male">Mám se! · verze ' + h(U.appVersion) + ' (první prototyp). Není zdravotnický prostředek a nenahrazuje odbornou pomoc.</p>' +
         '<p class="tlumene male">Kolo emocí a kolo potřeb © Emer, Mimonádovna. Průvodce je inspirovaný nenásilnou komunikací (Marshall B. Rosenberg; Feelings and Needs Inventory © 2005 Center for Nonviolent Communication). Skupiny potřeb podle Manfreda Max-Neefa.</p></section>' +
     '</main>' + navigace('nastaveni');
 }
@@ -2809,27 +2837,27 @@ const AKCE = {
   who5Ukazat() { tyden.ukazatWho5 = true; prekresli(); },
   async tydenOdlozit() {
     const kod = tydenKOhlednuti();
-    const t = (await U.nactiTyden(kod)) || { tyden: kod };
-    t.odlozeno = true; await U.ulozTyden(t); prekresli();
+    const t = (await U.getWeek(kod)) || { tyden: kod };
+    t.odlozeno = true; await U.saveWeek(t); prekresli();
   },
   async tydenUlozit() {
     if (diktovani) diktovani.stop();
     const t = tyden, skor = skorWho5(t.who5);
-    await U.ulozTyden({
+    await U.saveWeek({
       tyden: t.kod, od: t.data.rozsah.od, do: t.data.rozsah.do,
-      vytvoreno: t.ulozeny && t.ulozeny.vytvoreno ? t.ulozeny.vytvoreno : U.tedS(), upraveno: t.ulozeny && t.ulozeny.vyplneno ? U.tedS() : null,
+      vytvoreno: t.ulozeny && t.ulozeny.vytvoreno ? t.ulozeny.vytvoreno : U.timestamp(), upraveno: t.ulozeny && t.ulozeny.vyplneno ? U.timestamp() : null,
       vyplneno: true,
       podily: t.data.podily, minuty: t.data.minuty, pocet_zaznamu: t.data.pocet,
       barva: t.barva, vzpominka: t.vzpominka.trim(), tema: t.tema.trim(), dal: t.dal.trim(),
       who5: skor ? { odpovedi: [...t.who5], hruby: skor.hruby, index: skor.index, nizky: skor.nizky } : null,
-      verze_aplikace: U.VERZE_APLIKACE
+      verze_aplikace: U.appVersion
     });
     tyden = null;
     oznam('Týdenní ohlédnutí je uložené.');
     location.hash = '#/domov';
   },
   async prosbaZacit(d) {
-    const z = d.id ? await U.nactiZaznam(d.id) : null;
+    const z = d.id ? await U.getEntry(d.id) : null;
     prosba = novaProsba(z, d.zpet);
     location.hash = '#/prosba';
   },
@@ -2842,8 +2870,8 @@ const AKCE = {
     // Upravená prosba se uloží zpátky do záznamu (jen v telefonu).
     const z = prosba.zaznam;
     if (z && z.prosba !== prosba.text.trim()) {
-      z.prosba = prosba.text.trim(); z.upraveno = U.tedS();
-      await U.ulozZaznam(z);
+      z.prosba = prosba.text.trim(); z.upraveno = U.timestamp();
+      await U.saveEntry(z);
     }
     const c = prosba.komu === 'jiny' ? null : nastaveni.duveryhodne_kontakty[+prosba.komu];
     if (d.jak === 'sms' && c) {
@@ -2858,7 +2886,7 @@ const AKCE = {
     }
   },
   async oslavaSdilet(d) {
-    sdileniOslavy = noveSdileniOslavy(await U.nactiZaznam(d.id), d.zpet || '#/detail/' + encodeURIComponent(d.id));
+    sdileniOslavy = noveSdileniOslavy(await U.getEntry(d.id), d.zpet || '#/detail/' + encodeURIComponent(d.id));
     location.hash = '#/sdilet-oslavu';
   },
   oslavaSdiletFormat(d) { sdileniOslavy.format = d.format; prekresli(); },
@@ -2883,9 +2911,9 @@ const AKCE = {
     catch (e) { oznam('Kopírování nejde – text můžeš označit a zkopírovat ručně.'); }
   },
   oslavaZacit(d) { oslava = novaOslava(d.zpet, d.datum); location.hash = '#/oslava'; },
-  async oslavaUpravit(d) { oslava = oslavaZeZaznamu(await U.nactiZaznam(d.id), '#/detail/' + encodeURIComponent(d.id)); location.hash = '#/oslava'; },
+  async oslavaUpravit(d) { oslava = oslavaZeZaznamu(await U.getEntry(d.id), '#/detail/' + encodeURIComponent(d.id)); location.hash = '#/oslava'; },
   async oslavaZnovu(d) {
-    const z = await U.nactiZaznam(d.id);
+    const z = await U.getEntry(d.id);
     await spustOslavu(druhOslavy(Object.fromEntries(z.potreby.map(p => [p.potreba, p]))), z.vlastni_slova, await barvaDneK(z.chvile_od.slice(0, 10)));
   },
   oslavaSkupina(d) { oslava.otevrenaSkupina = oslava.otevrenaSkupina === d.skupina ? null : d.skupina; prekresli(); },
@@ -2946,7 +2974,7 @@ const AKCE = {
   sdiletStahnout() {
     const odkaz = document.createElement('a');
     odkaz.href = sdileni.obrazek.url;
-    odkaz.download = 'mam-se-snimek-dne-' + (vecer ? vecer.datum : U.datumDne()) + '.png';
+    odkaz.download = 'mam-se-snimek-dne-' + (vecer ? vecer.datum : U.dayDate()) + '.png';
     document.body.appendChild(odkaz); odkaz.click(); odkaz.remove();
   },
   async sdiletKopirovat() {  // jen text
@@ -2957,7 +2985,7 @@ const AKCE = {
   vecerNovy() { vecer.krok = 'bloky'; vecer.upravovany = 'novy'; vecer.rozpracovany = novyBlok(); prekresli(); },
   async vecerNacist(d) {
     const zdroj = (d && d.zdroj) || vecer.predchoziDen;
-    const z = (await U.vsechnyZaznamy())
+    const z = (await U.getEntries())
       .filter(x => x.typ === 'vecerni' && x.poradi != null && x.chvile_od.slice(0, 10) === zdroj)
       .sort((a, b) => a.poradi - b.poradi);
     // Přebíráme jen rozvrh (co, jak dlouho, s kým, kde) – ne pocity ani hodnocení.
@@ -2981,7 +3009,8 @@ const AKCE = {
       else { AKCE.blokHotovo(); if (vecer.upravovany !== null) return; }
     }
     if (!vecer.bloky.length) return;
-    await ulozVecer(false);
+    const saved = await ulozVecer(false);
+    if (!confirmEveningView(saved)) return;
     oznam('Rozvrh je uložený. Můžeš kdykoli pokračovat.');
     prekresli();
   },
@@ -3004,7 +3033,8 @@ const AKCE = {
   blokNehodnotit(d) { const b = vecer.bloky[+d.index]; b.hodnotit = false; b.vynechano = true; prekresli(); },
   async vecerUlozit() {
     if (diktovani) diktovani.stop();
-    await ulozVecer();
+    const saved = await ulozVecer();
+    if (!confirmEveningView(saved)) return;
     vecer.krok = nastaveni.barva_dne_zapnuta ? 'barva' : 'shrnuti';
     prekresli();
     window.scrollTo(0, 0);
@@ -3022,7 +3052,7 @@ const AKCE = {
     // Tělo, potřeby, co by pomohlo: záznam k celému dni (bez bloku)
     koncept = novyKoncept();
     koncept.typ = 'vecerni';
-    koncept.chvileOd = U.tedS(new Date(vecer.datum + 'T00:00:00'));
+    koncept.chvileOd = U.timestamp(new Date(vecer.datum + 'T00:00:00'));
     koncept.fokus = d.cast;
     location.hash = '#/zaznam-dal';
   },
@@ -3031,7 +3061,7 @@ const AKCE = {
     if (!el.value) return;
     nastaveni.pripominka_cas = el.value;
     nastaveni.pripominka_zapnuta = true;
-    await U.ulozNastaveni(nastaveni);
+    await U.saveSettings(nastaveni);
     prekresli();
   },
   stahnoutIcs() {
@@ -3044,16 +3074,16 @@ const AKCE = {
     setTimeout(() => { URL.revokeObjectURL(odkaz.href); odkaz.remove(); }, 1000);
   },
   async barvaDne(d) {
-    const den = (await U.nactiDen(d.datum)) || { datum: d.datum, barva: null, vecerni_hotovo: false, poznamka: '' };
+    const den = (await U.getDay(d.datum)) || { datum: d.datum, barva: null, vecerni_hotovo: false, poznamka: '' };
     den.barva = d.barva || null;
-    await U.ulozDen(den);
+    await U.saveDay(den);
     prekresli();
   },
   async barvaVlastni(d, el) { await AKCE.barvaDne({ datum: d.datum, barva: el.value.toUpperCase() }); },
   async barvyZapnute(d, el) {
     nastaveni.barva_dne_zapnuta = el.checked;
     nastaveni.barva_tydne_zapnuta = el.checked;
-    await U.ulozNastaveni(nastaveni);
+    await U.saveSettings(nastaveni);
     oznam('Uloženo.');
   },
   slovoUlozit() {
@@ -3088,13 +3118,13 @@ const AKCE = {
   },
   fotkaOdebrat() { koncept.fotka = null; prekresli(); },
   async upravitZaznam(d) {
-    koncept = konceptZeZaznamu(await U.nactiZaznam(d.id));
+    koncept = konceptZeZaznamu(await U.getEntry(d.id));
     location.hash = '#/zaznam';
   },
   smazatZaznam(d) { mazaniZaznamu = d.id; prekresli(); },
   smazatZaznamNe() { mazaniZaznamu = null; prekresli(); },
   async smazatZaznamAno(d) {
-    await U.smazZaznam(d.id);
+    await U.deleteEntry(d.id);
     mazaniZaznamu = null;
     oznam('Záznam je smazaný.');
     location.hash = '#/domov';
@@ -3230,9 +3260,9 @@ const AKCE = {
     }
     if (diktovani) diktovani.stop();
     const doplnuji = !!koncept.ulozeno;
-    if (doplnuji) koncept.upraveno = U.tedS(); // doplňování už uloženého záznamu
+    if (doplnuji) koncept.upraveno = U.timestamp(); // doplňování už uloženého záznamu
     const zaznam = sestavZaznam(koncept);
-    await U.ulozZaznam(zaznam);
+    await U.saveEntry(zaznam);
     posledni = zaznam;
     if (!doplnuji) posledniOslava = null;
     koncept.ulozeno = true;
@@ -3252,36 +3282,36 @@ const AKCE = {
   },
 
   async odkliknout(d) {
-    await U.odklikniDoporuceni(d.co, d.stav);
+    await U.dismissRecommendation(d.co, d.stav);
     doporuceniKUkazani = null;
     oznam('Rozumím. Vrátit to jde v Nastavení.');
     prekresli();
   },
 
   // ---- Nastavení ----
-  async osloveni(d, el) { nastaveni.tvar_osloveni = el.value; await U.ulozNastaveni(nastaveni); oznam('Uloženo.'); },
-  async chronicka(d, el) { nastaveni.chronicka_bolest = el.checked; await U.ulozNastaveni(nastaveni); oznam('Uloženo.'); },
+  async osloveni(d, el) { nastaveni.tvar_osloveni = el.value; await U.saveSettings(nastaveni); oznam('Uloženo.'); },
+  async chronicka(d, el) { nastaveni.chronicka_bolest = el.checked; await U.saveSettings(nastaveni); oznam('Uloženo.'); },
   async kontaktPridat() {
     const jmeno = document.getElementById('kontakt-jmeno').value.trim();
     const hodnota = document.getElementById('kontakt-hodnota').value.trim();
     if (!jmeno || !hodnota) { oznam('Vyplň jméno i telefon nebo e-mail.'); return; }
     const zpusob = hodnota.includes('@') ? 'email' : 'telefon';
     nastaveni.duveryhodne_kontakty.push({ jmeno, zpusob, hodnota });
-    await U.ulozNastaveni(nastaveni);
+    await U.saveSettings(nastaveni);
     prekresli();
   },
   async kontaktSmazat(d) {
     nastaveni.duveryhodne_kontakty.splice(parseInt(d.index, 10), 1);
-    await U.ulozNastaveni(nastaveni);
+    await U.saveSettings(nastaveni);
     prekresli();
   },
-  async vratitDoporuceni(d) { await U.vratDoporuceni(d.co); prekresli(); },
+  async vratitDoporuceni(d) { await U.restoreRecommendation(d.co); prekresli(); },
   async zaloha() {
-    const data = await U.vytvorZalohu();
+    const data = await U.exportBackup();
     const soubor = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const odkaz = document.createElement('a');
     odkaz.href = URL.createObjectURL(soubor);
-    odkaz.download = 'mam-se-zaloha-' + U.datumDne() + '.json';
+    odkaz.download = 'mam-se-zaloha-' + U.dayDate() + '.json';
     document.body.appendChild(odkaz);
     odkaz.click();
     setTimeout(() => { URL.revokeObjectURL(odkaz.href); odkaz.remove(); }, 1000);
@@ -3290,7 +3320,8 @@ const AKCE = {
     const soubor = el.files && el.files[0];
     if (!soubor) return;
     try {
-      const pridano = await U.nahrajZalohu(JSON.parse(await soubor.text()));
+      const pridano = await U.importBackup(JSON.parse(await soubor.text()));
+      nastaveni = await U.getSettings();
       oznam('Hotovo. Přibylo záznamů: ' + pridano + '.');
     } catch (chyba) {
       oznam(chyba.message || 'Zálohu se nepodařilo načíst.');
@@ -3300,12 +3331,11 @@ const AKCE = {
   smazat() { mazaniPotvrzeni = true; prekresli(); },
   smazatNe() { mazaniPotvrzeni = false; prekresli(); },
   async smazatAno() {
-    await U.smazVse();
-    nastaveni = await U.nactiNastaveni();
-    mazaniPotvrzeni = false;
-    koncept = null;
-    oznam('Všechno je smazané.');
+    await U.resetStorage();
+    // Reset odpojí i místní identitu; reload zahodí všechny rozepsané obrazovky.
+    storageReady = false;
     location.hash = '#/domov';
+    location.reload();
   }
 };
 
@@ -3319,10 +3349,10 @@ function prepniVSeznamu(pole, slovo) {
 // Spouštěč (schválený): bolest v 5 a více záznamech za posledních 7 dní.
 async function mamUkazatBolest() {
   if (nastaveni.chronicka_bolest) return false;
-  const odkliknuta = await U.vsechnaDoporuceni();
+  const odkliknuta = await U.getRecommendations();
   if (odkliknuta.some(d => d.co === 'zachranka')) return false;
   const tydenZpet = new Date(Date.now() - 7 * 24 * 3600 * 1000);
-  const zaznamy = await U.zaznamyOd(tydenZpet);
+  const zaznamy = await U.getEntriesSince(tydenZpet);
   const sBolesti = zaznamy.filter(z => (z.telo || []).some(t => t.pocit === 'bolest'));
   return sBolesti.length >= 5;
 }
@@ -3334,9 +3364,14 @@ async function mamUkazatBolest() {
 function trasa() { return location.hash.replace(/^#\/?/, '') || 'domov'; }
 
 let posledniTrasa = null;
+let renderVersion = 0;
 
 async function vykresli() {
-  const [t, parametr] = trasa().split('/');
+  if (!storageReady) return;
+  const currentRender = ++renderVersion;
+  const currentRoute = trasa();
+  try {
+  const [t, parametr] = currentRoute.split('/');
   const stejnaObrazovka = t === posledniTrasa;
   const posun = window.scrollY;
   let html;
@@ -3358,6 +3393,8 @@ async function vykresli() {
     case 'sdilet-oslavu': html = await obrazovkaSdiletOslavu(); break;
     default:           html = await obrazovkaDomov();
   }
+  // Pomalejší čtení předchozí obrazovky nesmí přepsat novější navigaci.
+  if (currentRender !== renderVersion || currentRoute !== trasa()) return;
   // Rozbalené části zůstanou rozbalené i po překreslení.
   const otevrene = stejnaObrazovka
     ? [...app.querySelectorAll('details[data-cast]')].filter(d => d.open).map(d => d.dataset.cast) : [];
@@ -3371,6 +3408,7 @@ async function vykresli() {
   // Při změně obrazovky nahoru, při překreslení stejné obrazovky zůstat na místě.
   window.scrollTo(0, stejnaObrazovka ? posun : 0);
   posledniTrasa = t;
+  } catch (error) { reportStorageError(error); }
 }
 
 function prekresli() { vykresli(); }
@@ -3383,6 +3421,17 @@ function rozvinPole(el) {
 }
 function rozvinVsechnaPole() { app.querySelectorAll('textarea').forEach(rozvinPole); }
 
+function reportStorageError(error) {
+  oznam(error?.message || 'Operace nebyla potvrzena. Obnov stránku a zkus to znovu.');
+}
+function runAction(action, element) {
+  if (element.disabled) return;
+  if (vecer && /^(blok|vecer)/.test(element.dataset.akce)) vecer.revision = (vecer.revision || 0) + 1;
+  if (element.tagName === 'BUTTON') element.disabled = true;
+  Promise.resolve().then(() => action(element.dataset, element)).catch(reportStorageError)
+    .finally(() => { if (element.isConnected && element.tagName === 'BUTTON') element.disabled = false; });
+}
+
 // Jedno místo pro všechna klepnutí.
 app.addEventListener('click', (ev) => {
   if (potlacitKlik) { ev.preventDefault(); return; } // klik po přetažení bloku ignorujeme
@@ -3391,7 +3440,7 @@ app.addEventListener('click', (ev) => {
   const akce = AKCE[el.dataset.akce];
   if (!akce) return;
   if (el.tagName === 'BUTTON') ev.preventDefault();
-  akce(el.dataset, el);
+  runAction(akce, el);
 });
 
 // Dlouhé podržení (asi půl vteřiny) na vybraném slově otevře úpravu.
@@ -3459,6 +3508,7 @@ function konecTazeni() {
   for (const r of radky) { const b = r.getBoundingClientRect(); if (b.top + b.height / 2 < t.y) nove++; }
   const [blok] = vecer.bloky.splice(t.i, 1);
   vecer.bloky.splice(nove, 0, blok);
+  vecer.revision = (vecer.revision || 0) + 1;
   prekresli();
 }
 app.addEventListener('pointerup', konecTazeni);
@@ -3470,7 +3520,7 @@ app.addEventListener('change', (ev) => {
   const el = ev.target;
   if (el.tagName !== 'INPUT' || !el.dataset.akce) return;
   const akce = AKCE[el.dataset.akce];
-  if (akce) akce(el.dataset, el);
+  if (akce) runAction(akce, el);
 });
 
 // Psaní do polí: ukládáme průběžně, ale obrazovku nepřekreslujeme
@@ -3478,8 +3528,8 @@ app.addEventListener('change', (ev) => {
 app.addEventListener('input', (ev) => {
   const el = ev.target;
   if (el.tagName === 'TEXTAREA') rozvinPole(el);
-  if (el.dataset.blokText != null && vecer) { vecer.bloky[+el.dataset.blokText].text = el.value; return; }
-  if (el.dataset.blokPopis && vecer && vecer.rozpracovany) { vecer.rozpracovany.popis = el.value; return; }
+  if (el.dataset.blokText != null && vecer) { vecer.revision = (vecer.revision || 0) + 1; vecer.bloky[+el.dataset.blokText].text = el.value; return; }
+  if (el.dataset.blokPopis && vecer && vecer.rozpracovany) { vecer.revision = (vecer.revision || 0) + 1; vecer.rozpracovany.popis = el.value; return; }
   if (el.dataset.oslavaPole && oslava) { oslava[el.dataset.oslavaPole] = el.value; return; }
   if (el.dataset.tydenPole && tyden) { tyden[el.dataset.tydenPole] = el.value; return; }
   if (el.dataset.oslavaKomentar && sdileniOslavy) { sdileniOslavy.komentar = el.value; return; }
@@ -3537,12 +3587,14 @@ window.addEventListener('hashchange', vykresli);
 // Start aplikace
 (async function start() {
   try {
-    nastaveni = await U.nactiNastaveni();
+    U = { ...storage, ...await storage.getStorage() };
+    nastaveni = await U.getSettings();
+    storageReady = true;
   } catch (e) {
-    app.innerHTML = '<main class="obsah"><h1>Úložiště nejde otevřít</h1><p>Prohlížeč možná běží v anonymním režimu nebo má ukládání vypnuté. Zkus aplikaci otevřít v běžném okně Chromu.</p></main>';
+    app.innerHTML = '<main class="obsah"><h1>Úložiště nejde otevřít</h1><p>' + h(e.message || 'Prohlížeč neposkytuje trvalé úložiště.') + '</p><p>Zkus běžné okno prohlížeče a obnov stránku. Data nebyla přepnuta do náhradního úložiště.</p></main>';
     return;
   }
-  vykresli();
+  await vykresli();
   // Offline provoz a instalace na plochu
   if (import.meta.env.PROD && 'serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});

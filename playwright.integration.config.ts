@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 const base = process.env.PUBLIC_APP_BASE || '/mam-se/';
 export default defineConfig({
+  outputDir: 'test-results/integration',
   testDir: './tests/integration',
   use: { baseURL: `http://127.0.0.1:4322${base}` },
   projects: [

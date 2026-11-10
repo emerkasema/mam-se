@@ -1,4 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { photoBase64 } from '../fixtures/mapping.ts';
+import { test } from '../integration/browser.ts';
 
 test('záznam přežije reload i offline otevření', async ({ page, context }) => {
   const errors: string[] = [];
@@ -7,6 +9,15 @@ test('záznam přežije reload i offline otevření', async ({ page, context }) 
   await expect(page.locator('[data-akce="novyZaznam"]')).toBeVisible();
   await page.locator('[data-akce="novyZaznam"]').click();
   await page.locator('#text').fill('Syntetický záznam pro test Astro.');
+  await page
+    .locator('[data-akce="fotkaPridat"]')
+    .last()
+    .setInputFiles({
+      name: 'synthetic.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(photoBase64, 'base64'),
+    });
+  await expect(page.getByAltText('Připojená fotka')).toBeVisible();
   await page.locator('[data-akce="ulozit"]').click();
   await expect(page).toHaveURL(/#\/hotovo/);
   await page.goto('./#/domov');
@@ -19,6 +30,7 @@ test('záznam přežije reload i offline otevření', async ({ page, context }) 
   await context.setOffline(true);
   await page.reload();
   await expect(page.getByText('Syntetický záznam pro test Astro.', { exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
   const wrongFallback = await page.evaluate(async () => {
     try {
       const response = await fetch('chybejici-test.js');
@@ -28,7 +40,6 @@ test('záznam přežije reload i offline otevření', async ({ page, context }) 
     }
   });
   expect(wrongFallback).toBeNull();
-  expect(errors).toEqual([]);
 });
 
 test('mobilní obálka zachovává navigaci a vzhledové assety', async ({ page }) => {

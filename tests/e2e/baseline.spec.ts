@@ -1,5 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { legacyFixture } from '../fixtures/legacy.ts';
+import { test } from '../integration/browser.ts';
 
 // Fixní okamžik nestačí: UI používá místní datum i čas.
 test.use({ timezoneId: 'Europe/Prague' });
@@ -8,31 +9,17 @@ for (const width of [390, 1280]) {
   test(`upstream visual baseline ${width}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     await page.clock.setFixedTime(new Date('2026-11-10T12:00:00+01:00'));
-    await page.goto('./');
-    await expect(page.locator('[data-akce="novyZaznam"]')).toBeVisible();
-    await page.evaluate(async (fixture) => {
-      const db = await new Promise<IDBDatabase>((resolve, reject) => {
-        const request = indexedDB.open('mamse', 1);
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-      try {
-        await new Promise<void>((resolve, reject) => {
-          const transaction = db.transaction(Object.keys(fixture), 'readwrite');
-          transaction.oncomplete = () => resolve();
-          transaction.onabort = () => reject(transaction.error);
-          for (const [name, values] of Object.entries(fixture)) {
-            const store = transaction.objectStore(name);
-            store.clear();
-            if (name === 'nastaveni') store.put(values, 'hlavni');
-            else for (const value of values as unknown[]) store.put(value);
-          }
-        });
-      } finally {
-        db.close();
-      }
-    }, legacyFixture);
-    await page.reload();
+    await page.goto('./#/nastaveni');
+    await expect(page.getByRole('heading', { name: 'Záloha', exact: true })).toBeVisible();
+    await page.locator('input[type="file"]').setInputFiles({
+      name: 'synthetic-backup.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(
+        JSON.stringify({ aplikace: 'Mám se!', format_zalohy: 1, ...legacyFixture }),
+      ),
+    });
+    await expect(page.getByText('Hotovo. Přibylo záznamů: 1.', { exact: true })).toBeVisible();
+    await expect(page.locator('.oznameni')).toBeHidden();
     const routes = [
       ['home', 'domov'],
       ['entry', 'zaznam'],

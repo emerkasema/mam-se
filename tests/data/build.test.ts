@@ -12,6 +12,11 @@ test('offline manifest obsahuje existující obálku, skripty, styly a fonty', a
   assert.ok(assets.includes('styl.css'));
   assert.ok(assets.some((path) => path.startsWith('_astro/') && path.endsWith('.js')));
   assert.ok(assets.includes('fonty/Inter-Regular.woff'));
+  assert.ok(assets.includes('fonty/Fraunces-Latin.woff2'));
+  assert.ok(assets.includes('fonty/Fraunces-LatinExt.woff2'));
+  assert.ok(assets.some((path) => /Db\.worker.*\.js$/.test(path)));
+  assert.ok(assets.some((path) => /Shared\.worker.*\.js$/.test(path)));
+  assert.ok(assets.some((path) => path.endsWith('.wasm')));
   for (const path of assets) {
     assert.ok(!path.startsWith('/') && !path.includes('..'));
     assert.ok((await stat(`dist/${path}`)).isFile(), path);

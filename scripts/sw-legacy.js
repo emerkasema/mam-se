@@ -1,9 +1,9 @@
 // =====================================================================
 // SERVICE WORKER – díky němu aplikace funguje i bez internetu.
-// Uloží si soubory aplikace (ne Tvoje data – ta jsou v IndexedDB).
+// Uloží si soubory aplikace (ne Tvoje data – ta jsou v místní SQLite/OPFS).
 //
 // Přechodná šablona: build-sw.mjs nahradí VERZE a SOUBORY podle buildu.
-// Ručně je neměň; finální Workbox integrace přijde v dalším kroku.
+// Ručně je neměň; Workbox není pro tento lokální prototyp potřebný.
 // =====================================================================
 
 const VERZE = 'mamse-v0.7.0';
@@ -42,7 +42,7 @@ self.addEventListener('activate', (ev) => {
 // Načítání: nejdřív zkusit internet (aby byla vždy nejnovější verze),
 // bez internetu použít uloženou kopii.
 self.addEventListener('fetch', (ev) => {
-  if (ev.request.method !== 'GET') return;
+  if (ev.request.method !== 'GET' || new URL(ev.request.url).origin !== location.origin) return;
   ev.respondWith(
     fetch(ev.request)
       .then((odpoved) => {
