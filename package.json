@@ -14,7 +14,9 @@
     "preview": "astro preview",
     "check": "tsc --noEmit",
     "test": "node --test tests/data/*.test.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "build:integration": "astro build --root tests/integration/astro",
+    "test:integration": "playwright test --config playwright.integration.config.ts"
   },
   "dependencies": {
     "@evolu/common": "8.27.2",
