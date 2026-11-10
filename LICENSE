@@ -1,0 +1,14 @@
+NEROZHODNUTÁ LICENCE — ŠABLONA, NIKOLI LICENČNÍ OPRÁVNĚNÍ
+
+DOPLNIT PŘED MERGEM: autorka určí licenci aplikace, držitele práv a rozsah
+oprávnění, která může udělit. Poté tento text nahradí úplným zněním zvolené
+licence a odpovídajícím způsobem upraví package.json. Do té doby zůstává
+license: UNLICENSED. Tento soubor neuděluje MIT ani jinou otevřenou licenci.
+
+Licence závislostí, písem a převzatých děl platí samostatně; tento soubor
+je nenahrazuje. Zachovejte atribuce uvedené v README a fontové licence.
+Fraunces: public/fonty/Fraunces-OFL.txt (SIL OFL 1.1).
+Inter: README uvádí SIL Open Font License, ale úplný licenční text pro
+přibalené soubory Inter v repozitáři chybí. DOPLNIT PŘED MERGEM:
+ověřit původ/verzi souborů a přiložit odpovídající úplnou licenci i atribuci.
+Oprávnění k dalším převzatým materiálům musí potvrdit autorka.

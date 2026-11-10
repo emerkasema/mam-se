@@ -1,0 +1,12 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8" /><title>Legacy snapshot</title></head><body><output id="snapshot">Loading</output></body></html>
+<script>
+  import { readLegacySnapshot } from '../../../../../src/data/legacy';
+  async function serializable(value: unknown): Promise<unknown> {
+    if (value instanceof Blob) return { mime: value.type, bytes: Array.from(new Uint8Array(await value.arrayBuffer())) };
+    if (Array.isArray(value)) return Promise.all(value.map(serializable));
+    if (value && typeof value === 'object') return Object.fromEntries(await Promise.all(Object.entries(value).map(async ([key, item]) => [key, await serializable(item)])));
+    return value;
+  }
+  try { document.querySelector('#snapshot')!.textContent = JSON.stringify(await serializable(await readLegacySnapshot())); }
+  catch (error) { document.querySelector('#snapshot')!.textContent = error instanceof Error ? error.message : 'error'; }
+</script>
