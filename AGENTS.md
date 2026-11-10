@@ -33,11 +33,13 @@
 4. Browser testy: jednorázově `bunx --no-install playwright install chromium`, potom `bun run test:e2e`. Testuje se build; stejnou `PUBLIC_APP_BASE` použij při buildu i testu. Playwright používá `--ignore-lock`, aby Astro pod agentem nespustilo nezávislý daemon.
 5. Před commitem zkontroluj diff a `git diff --check`. Testuj jen syntetická data. Neupravuj globální bezpečnostní nastavení; nálezy auditu neřeš automatickým hromadným upgradem závislostí.
 
-## Stav při předání (10. 11. 2026)
+## Aktuální lokální prototyp (10. 11. 2026)
 
-- Existuje Astro scaffold a přesunuté soubory v `src/app/` a `public/`. `src/app/uloziste.js` stále používá původní IndexedDB.
-- Samostatná klientská integrace Evolu je ověřená zápisem/čtením/reloadem, workery a WASM v Chromium/Firefox/WebKit. Testovací root `tests/integration/astro` není součástí produkční aplikace. **Produkční adaptér, migrace, obnova identity a sync stále nejsou implementované.** Pomocné moduly v `src/data/` nejsou zapojené do deníku; strukturální validace zálohy není kompletní `prepareImport`.
-- `scripts/build-sw.mjs` generuje manifest skutečných Astro assetů pro přechodný SW. Workbox, místní Fraunces a obnova konceptů čekají.
-- `check` spouští Biome pro vybraný rozsah a TS kontrolu; původní JS ani typy Astro šablon nepokrývá. `@astrojs/check` 0.9.12 podporuje TS 5/6, projekt má TS 7; nepoužívej `--force` / `--legacy-peer-deps`.
-- Pět cílových kroků plánu není tímto scaffoldem dokončeno. Stav ověř v ledgeru a Git historii. CI a šablony připrav pro GitLab; automatické nasazení nepřidávej.
-- Volitelný navazující upstream úkol je v soukromém `tasks/2026-11-10-evolu-astro-upstream.md`. Nepředpokládej potřebu Astro adaptéru: nejprve ověř běžnou klientskou integraci. Příprava příspěvku neopravňuje k publikaci issue, PR ani balíčku.
+- Produkční `src/app/app.js` používá EN API `src/data/storage.ts` nad Evolu/SQLite. Synchronizace je vypnutá (`transports: []`), recovery není implementované. Nepřidávej relay ani serverové přihlášení.
+- Nový uživatel začíná s prázdným deníkem. Původní `src/app/uloziste.js` ani `src/data/legacy.ts` se do produkce neimportují. Read-only snapshot, mapování a legacy testy jsou ponechané jako příprava pro Emerku; **automatická migrace není dokončená ani zapojená**. Původní IndexedDB se při startu ani resetu této verze nečte a nemaže.
+- Adaptér podporuje lokální CRUD, potvrzené mazání i obnovení stejného ID, společnou dávku večera, JSON export/import a místní reset včetně identity. Změny nových karet koordinuje Web Lock, stav resetu přežívá vymazání Evolu DB. Nepoužívej přímé nízkoúrovňové mutace z UI místo writeru.
+- Import ověřuje celý soubor, dekódování fotek a limity před zápisem. Zachovej legacy klíče, všech šest stores, další klíče nastavení, neznámá kompatibilní JSON pole a přesné uložené bajty/MIME fotek. `settingsEntries` rozšiřuje formát 1 o explicitní klíče nastavení. Nepodporovaný obsah odmítej, nezahazuj.
+- `scripts/build-sw.mjs` generuje manifest skutečných assetů včetně workerů/WASM a místních fontů Inter/Fraunces. Workbox není podmínkou prototypu. Rozepsaný obsah je jen v paměti; nevyvolávej automatický reload během psaní.
+- `check` pokrývá Biome pro vybraný rozsah a TS kontrolu. Původní JS ani typy Astro šablon nepokrývá; ověřuj je buildem a browser testy. `@astrojs/check` 0.9.12 podporuje TS 5/6, projekt má TS 7; nepoužívej `--force` / `--legacy-peer-deps`.
+- `bun run test:e2e` testuje produkční build v Chromium/Firefox/WebKit; 14 vizuálních baseline snímků pouze macOS/Chromium. Integrační root není součást produkce. Fyzický telefon a velké archivy vyžadují samostatné ověření, testy desktopových enginů je nenahrazují. Podrobnosti jsou v README.
+- Volitelný upstream úkol a široké recovery/sync zadání zůstávají odložené. Žádný push/merge/PR/deploy či změna remotes bez dalšího výslovného pokynu.
