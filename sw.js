@@ -6,7 +6,7 @@
 // Telefony tak poznají, že si mají stáhnout novou verzi.
 // =====================================================================
 
-const VERZE = 'mamse-v0.7.0';
+const VERZE = 'mamse-v0.10.0';
 
 const SOUBORY = [
   './',
@@ -20,6 +20,8 @@ const SOUBORY = [
   'fonty/Inter-Regular.woff',
   'fonty/Inter-Medium.woff',
   'fonty/Inter-SemiBold.woff',
+  'fonty/Fraunces-Medium.woff',
+  'fonty/Fraunces-SemiBold.woff',
   'ikony/logo.svg',
   'ikony/ikona-192.png',
   'ikony/ikona-512.png'

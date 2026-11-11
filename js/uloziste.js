@@ -6,7 +6,7 @@
 
 const NAZEV_DB = 'mamse';
 const VERZE_DB = 1;
-export const VERZE_APLIKACE = '0.7.0';
+export const VERZE_APLIKACE = '0.10.0';
 
 // Výchozí nastavení – použije se, dokud člověk nic nezmění.
 export const VYCHOZI_NASTAVENI = {
@@ -19,6 +19,7 @@ export const VYCHOZI_NASTAVENI = {
   chronicka_bolest: false,
   tvar_osloveni: 'oba',       // 'oba' = „byla/byl“, 'zensky' = „byla“, 'muzsky' = „byl“
   souhrn_zapnut: false,
+  diktovani_zapnuto: false,   // souhlas s diktováním přes prohlížeč (řeč zpracovává Google)
   kod_ucastnika: null,
   verze_aplikace: VERZE_APLIKACE
 };
@@ -104,6 +105,11 @@ export function ulozTyden(t) {
 }
 export function vsechnyTydny() {
   return operace('tydny', 'readonly', s => s.getAll());
+}
+
+// Souhlasy: každá změna se zapíše zvlášť (co, zapnuto/vypnuto, verze textu, kdy).
+export function ulozSouhlas(co, zapnuto, verzeTextu) {
+  return operace('souhlasy', 'readwrite', s => s.put({ id: co + '-' + Date.now(), co, zapnuto, verze_textu: verzeTextu, kdy: tedS() }));
 }
 
 export async function nactiNastaveni() {
