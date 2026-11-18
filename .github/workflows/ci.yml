@@ -30,7 +30,7 @@ jobs:
     # Verze musí odpovídat @playwright/test v package.json; digest brání
     # tiché změně image. Stejný image používá GitLab CI.
     container:
-      image: mcr.microsoft.com/playwright:v1.65.1-noble@sha256:35406ab6ced53143cd1355c2cd409b13a3e348a959393d7d08977b12e28d945d
+      image: mcr.microsoft.com/playwright:v1.65.1-noble@sha256:1507cbfc550a63a6b7396791ca4f00df17beb56342d2447b3f106c306f525579
       options: --ipc=host
     defaults:
       run:
@@ -44,9 +44,15 @@ jobs:
         with:
           node-version-file: .node-version
           package-manager-cache: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version-file: .bun-version
+      - name: Install pinned Bun without an external unzip
+        # setup-bun rozbaluje ZIP systémovým unzip, který tento image
+        # negarantuje. npm zde pouze zavádí Bun, ne závislosti aplikace.
+        run: |
+          ci_bun_version=$(cat .bun-version)
+          ci_bun_prefix="$RUNNER_TEMP/mam-se-bun"
+          npm install --global --prefix "$ci_bun_prefix" --no-audit --no-fund "bun@$ci_bun_version"
+          test "$("$ci_bun_prefix/bin/bun" --version)" = "$ci_bun_version"
+          echo "$ci_bun_prefix/bin" >> "$GITHUB_PATH"
       - run: bun install --frozen-lockfile
       - run: bun run check
       # build zahrnuje SW manifest; dist/ se po testech znovu nesestavuje.

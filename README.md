@@ -100,7 +100,7 @@ Před dalším běžným testováním obnov výchozí build příkazem `bun run 
 
 `bun run lint` provede pouze Biome kontrolu a `bun run format` opraví formátování moderních souborů. Původní `src/app/`, veřejné assety a `.astro` šablony nejsou plošně přeformátované. Před commitem zkontroluj také `git diff --check`.
 
-**Vzdálené CI:** GitHub Actions ověřuje funkce na Linuxu a snímky na macOS. GitLab origin má vlastní `.gitlab-ci.yml` se stejnými Linux funkčními kontrolami a artefaktem buildu, bez automatického nasazení. Oba Linux joby používají připnutý Playwright image s již nainstalovanými prohlížeči; při změně verze Playwright aktualizuj image v obou konfiguracích. Postup pro porovnání SHA a kontrolu runnerů je v [návodu ke správě](docs/MAINTAINER.md#jak-ověřit-skutečný-vzdálený-běh).
+**Vzdálené CI:** GitHub Actions ověřuje funkce na Linuxu a snímky na macOS. GitLab origin má vlastní `.gitlab-ci.yml` se stejnými Linux funkčními kontrolami a artefaktem buildu, bez automatického nasazení. Oba Linux joby používají připnutý Playwright image s již nainstalovanými prohlížeči; při změně verze Playwright aktualizuj image v obou konfiguracích a ověř ho příkazem `bun run check:ci-image` (potřebuje síť). Postup pro porovnání SHA a kontrolu runnerů je v [návodu ke správě](docs/MAINTAINER.md#jak-ověřit-skutečný-vzdálený-běh).
 
 ## Krátká ruční zkouška na telefonu
 

@@ -18,7 +18,7 @@ variables:
 functional:
   stage: verify
   # Připravené prohlížeče nahrazují pomalou instalaci přes apt při každém běhu.
-  image: mcr.microsoft.com/playwright:v1.65.1-noble@sha256:35406ab6ced53143cd1355c2cd409b13a3e348a959393d7d08977b12e28d945d
+  image: mcr.microsoft.com/playwright:v1.65.1-noble@sha256:1507cbfc550a63a6b7396791ca4f00df17beb56342d2447b3f106c306f525579
   tags: [saas-linux-small-amd64]
   timeout: 25 minutes
   interruptible: true
