@@ -40,6 +40,14 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      - name: Align container home ownership for Firefox
+        # GitHub připojí /github/home s jiným vlastníkem, než má proces
+        # v tomto image. Firefox takovou root relaci odmítne ještě před testem.
+        # Měníme jen vlastníka adresáře v dočasném jobu (bez rekurze),
+        # nikoli HOME vývojáře nebo sandbox prohlížeče.
+        run: |
+          chown "$(id -u):$(id -g)" "$HOME"
+          test "$(stat -c %u "$HOME")" = "$(id -u)"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
