@@ -1,0 +1,44 @@
+# GitLab ověřuje stejnou aplikaci jako GitHub; nic automaticky nepublikuje.
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    # Pokud existuje MR, nevytváříme k němu ještě duplicitní push pipeline.
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH =~ /^(main|miccy-main|miccy-dev|codex-.+)$/'
+    - when: never
+
+stages: [verify]
+
+variables:
+  PUBLIC_APP_BASE: /mam-se/
+  ASTRO_TELEMETRY_DISABLED: '1'
+  TZ: UTC
+
+functional:
+  stage: verify
+  # Připravené prohlížeče nahrazují pomalou instalaci přes apt při každém běhu.
+  image: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:7d65a4f42874c51eb04593bb37c4a492af87092ff7a74d2b79ba3c84e1c15aa2
+  tags: [saas-linux-small-amd64]
+  timeout: 25 minutes
+  interruptible: true
+  before_script:
+    # Node v image není verzovacím kontraktem aplikace. Doplníme proto naše
+    # přesné nástroje; npm zde pouze zavádí Bun, neinstaluje závislosti projektu.
+    - . ./scripts/setup-gitlab-tools.sh
+    - bun install --frozen-lockfile
+  script:
+    - bun run check
+    - bun run build
+    - bun run test
+    # macOS snímky se porovnávají na macOS v GitHub CI a lokálně, ne na Linuxu.
+    - bun run test:e2e --grep-invert 'upstream visual baseline' --workers=1 --global-timeout=600000
+    - bun run build:integration
+    - bun run test:integration --workers=1 --global-timeout=600000
+  artifacts:
+    # Pouze statický build a syntetická diagnostika, nikdy lokální uživatelská DB.
+    when: always
+    expire_in: 1 day
+    paths:
+      - dist/
+      - test-results/

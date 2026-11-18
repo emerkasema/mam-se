@@ -4,6 +4,7 @@ const base = process.env.PUBLIC_APP_BASE || '/mam-se/';
 export default defineConfig({
   outputDir: 'test-results/integration',
   testDir: './tests/integration',
+  expect: { timeout: process.env.CI ? 20_000 : 5_000 },
   use: { baseURL: `http://127.0.0.1:4322${base}` },
   projects: [
     { name: 'chromium', use: devices['Desktop Chrome'] },

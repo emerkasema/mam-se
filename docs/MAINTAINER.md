@@ -41,7 +41,29 @@ Baseline snímky odpovídají po vizuální kontrole upstreamu `0.10.0`. Při da
 3. Výchozí `GITHUB_TOKEN` nastav jen pro čtení obsahu a schvaluj běhy externích přispěvatelů. Workflow nepoužívají `pull_request_target`, PAT ani produkční tajemství. Pages/OIDC zápis má pouze deploy job; metadata Pages mají `pages: read`.
 4. Zapni dostupné dependency/security alerts a soukromé hlášení zranitelností; dostupnost ochrany větví, Pages a bezpečnostních funkcí závisí na tarifu a viditelnosti repozitáře. Plošný auto-merge není potřeba.
 
-Linux (`ubuntu-24.04`) spouští check, produkční build, unit, funkční E2E ve třech enginech a integrační build/testy. macOS (`macos-15`) spouští Chromium vizuální baseline (14 snímků ve dvou testech). Ty vznikly lokálně na macOS 27/arm64, nikoli na tomto GitHub runneru; rozdíl OS, architektury nebo fontového renderování může vyžadovat kontrolu diffu. Baseline se automaticky neobnovuje. macOS má vyšší spotřebu placených minut; zkontroluj rozpočet. Selhání uchová pouze syntetickou diagnostiku na 3 dny. Místní úspěch neověřuje GitHub runner ani fyzický telefon.
+Linux (`ubuntu-24.04`) spouští check, produkční build, unit, funkční E2E ve třech enginech a integrační build/testy v oficiálním Playwright kontejneru s již přibalenými prohlížeči a systémovými knihovnami. Image je připnutý verzí i digestem; jeho verze musí odpovídat `@playwright/test` v `package.json` a image v GitLabu. Tím se neopakuje pomalá instalace přes Ubuntu apt mirror. Node a Bun stále určuje `.node-version` a `.bun-version`.
+
+macOS (`macos-15`, arm64) spouští Chromium vizuální baseline (14 snímků ve dvou testech). Ty vznikly lokálně na macOS 27/arm64, nikoli na tomto GitHub runneru; rozdíl OS nebo fontového renderování může vyžadovat kontrolu diffu. Baseline se automaticky neobnovuje. macOS má vyšší spotřebu placených minut; zkontroluj rozpočet. Selhání uchová pouze syntetickou diagnostiku na 3 dny. Místní úspěch neověřuje GitHub runner ani fyzický telefon.
+
+Funkční sady v CI používají jednoho workera a vlastní desetiminutový limit. Nejde o omezení pokrytí: postupně se provedou všechny tři enginy. Playwright tak může ukončit zaseknutý test a vytvořit diagnostiku dřív, než celý job zabije limit hostingu. Vizuální sada má pětiminutový limit. UI assertions mají v CI 20 sekund místo místních 5 sekund, aby jejich čekání neskončilo dřív než patnáctisekundový limit potvrzení zápisu v úložišti; samotné ověřované podmínky se nemění.
+
+## GitLab origin
+
+Soubor `.gitlab-ci.yml` spouští pro `main`, `miccy-main`, `miccy-dev`, `codex-*` a merge requesty stejnou Linux funkční sadu jako GitHub: check, produkční build, unit, E2E a datovou integraci. Pokud má větev otevřený MR, běží jen jeho pipeline. macOS snímky zůstávají v GitHub CI a lokální kontrole; v Linuxu se nepřepisují.
+
+GitLab job používá tag `saas-linux-small-amd64`. Projekt musí mít povolené odpovídající instance runnery a dostupnou kapacitu/compute quota; samotné označení runneru „online“ nepotvrzuje zbývající kredit. `scripts/setup-gitlab-tools.sh` je jen pro dočasný Linux kontejner: ověří SHA-256 oficiálního Node archivu a zavede připnutý Bun do `/tmp`. npm slouží pouze k zavedení Bun, závislosti aplikace instaluje výhradně `bun install --frozen-lockfile`.
+
+GitLab uchovává `dist/` a syntetickou diagnostiku jako jednodenní artefakty. **Nemá deploy job a nepublikuje GitLab Pages.** Produkční publikace zůstává samostatně povolovaným GitHub Pages workflow popsaným níže.
+
+## Jak ověřit skutečný vzdálený běh
+
+1. Po schváleném push otevři **GitHub → Actions → CI** a **GitLab → Build → Pipelines**. V obou zkontroluj stejný commit SHA, ne pouze zelenou ikonku jiné větve nebo starší verze.
+2. V GitHub CI musí dokončit Linux i macOS job. V GitLabu musí projít `functional`. „Žádná pipeline“ není úspěch; nejdřív ověř přítomnost konfigurace v předané větvi a povolené runnery.
+3. Při chybě otevři první neúspěšný krok. Chyba buildu/testu patří do kódu; vyčerpaný kredit, nedostupný runner nebo timeout při přípravě prostředí vyžadují kontrolu hostingu. Neřeš je vypnutím testů, `allow_failure` ani automatickým přepsáním baseline.
+4. Pokud macOS hlásí „The job was not acquired by Runner“, nejde o výsledek vizuálního testu. Při běhu z 18. 11. 2026 GitHub výslovně hlásil nedostatek arm64 kapacity. Zopakuj dotčený job po uvolnění kapacity; samotný delší timeout testu chybějící runner nenahradí. [GitHub: dostupnost macOS runnerů](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+5. Zelené CI ještě neznamená publikovaný web. Pro Pages zkontroluj zvlášť schválený deploy a výslednou URL; úspěšný deploy původního `main` neověřuje Astro referenční větev.
+
+Přípravu lze před push ověřit pomocí `actionlint` a GitLab **CI Lint** v režimu dry-run. Validní YAML není doklad vykonaných browser testů ani oprávnění k deploy. Podklady: [Playwright v Dockeru](https://playwright.dev/docs/docker), [Playwright v CI](https://playwright.dev/docs/ci), [GitLab CI konfigurace](https://docs.gitlab.com/ci/yaml/).
 
 ## První Pages nasazení — po rozhodnutí autorky
 
