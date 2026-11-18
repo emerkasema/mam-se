@@ -368,6 +368,21 @@ function radekSeznamu(polozka) {
 }
 
 // ---------------- DOMOV ----------------
+// Připomenutí zálohy: když je v telefonu aspoň 10 záznamů a poslední záloha
+// (nebo připomenutí) je starší než 30 dní.
+function backupReminderCard(entryCount) {
+  if (entryCount < 10) return '';
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
+  const threshold = U.timestamp(cutoff);
+  const latest = [nastaveni.posledni_zaloha, nastaveni.zaloha_pripomenuta].filter(Boolean).sort().pop();
+  if (latest && latest > threshold) return '';
+  return '<section class="karta doporuceni"><h2>Je čas na zálohu</h2>' +
+    '<p>' + (nastaveni.posledni_zaloha ? 'Poslední zálohu máš starší než měsíc.' : 'Tvoje záznamy jsou jen v tomto telefonu a zatím nemáš žádnou zálohu.') +
+    ' Kdyby se telefon ztratil nebo se smazala data prohlížeče, bez zálohy o ně přijdeš.</p>' +
+    '<div class="dvojice"><button type="button" class="tlacitko" data-akce="zaloha">Stáhnout zálohu</button>' +
+    '<button type="button" class="tlacitko obrys" data-akce="remindBackupLater">Později</button></div></section>';
+}
+
 function nazevTydne(pondeli) {
   if (posunTydne === 0) return 'Tento týden';
   if (posunTydne === -1) return 'Minulý týden';
@@ -418,7 +433,7 @@ async function obrazovkaDomov() {
   const kartaTydne = maZaznamy && !(ulozT && (ulozT.vyplneno || ulozT.odlozeno))
     ? '<section class="karta"><div class="karta-radek"><h2>Týdenní ohlédnutí</h2><span class="tlumene">' + h(rT.text) + '</span></div>' +
       '<p class="tlumene">Jaký byl Tvůj týden?</p>' +
-      '<div class="odkazy"><a class="tlacitko jemne" href="#/tyden/' + kodT + '">Začít</a>' +
+      '<div class="odkazy"><a class="tlacitko jemne" href="#/tyden/' + kodT + '">Ohlédnout se za týdnem</a>' +
       '<button type="button" class="tlacitko obrys male-t" data-akce="tydenOdlozit">Tento týden ne</button></div></section>'
     : '';
 
@@ -439,9 +454,9 @@ async function obrazovkaDomov() {
       '<span class="tlacitko svetle"><span class="ikony">' + IKONA.tuzka + IKONA.mikrofon + '</span>Zaznamenat</span>' +
     '</a>' + rozepsano +
     '<a class="tlacitko-pomoc" href="#/pomoc">' + IKONA.srdce + 'Potřebuju pomoc</a>' +
-    '<section class="karta"><div class="karta-radek"><h2>Večerní ohlédnutí</h2><span class="tlumene">v ' + h(nastaveni.pripominka_cas) + '</span></div>' +
+    '<section class="karta"><div class="karta-radek"><h2>Večerní ohlédnutí · ' + (() => { const d = new Date(denVecera + 'T12:00:00'); return d.getDate() + '. ' + (d.getMonth() + 1) + '.'; })() + '</h2><span class="tlumene">v ' + h(nastaveni.pripominka_cas) + '</span></div>' +
       '<p class="tlumene">' + (jeVcera ? 'Jaký byl včerejší den? Ohlédnutí ještě není hotové.' : dnesVecer ? 'Dnešní ohlédnutí je hotové. Můžeš ho kdykoli doplnit.' : 'Jaký byl Tvůj den?') + '</p>' +
-      '<a class="tlacitko jemne" style="align-self:flex-start" href="#/vecer">' + (dnesVecer ? 'Upravit ohlédnutí' : 'Začít ohlédnutí') + '</a></section>' +
+      '<a class="tlacitko jemne" style="align-self:flex-start" href="#/vecer/' + denVecera + '">' + (dnesVecer ? 'Upravit ohlédnutí' : 'Ohlédnout se za dnem') + '</a></section>' +
     kartaTydne +
     '<section class="karta"><div class="karta-radek prehled-tydnu">' +
       '<button type="button" class="ikona-tlacitko bez-okraje" data-akce="tydenPosun" data-smer="-1" aria-label="Předchozí týden">‹</button>' +
@@ -449,7 +464,9 @@ async function obrazovkaDomov() {
       '<button type="button" class="ikona-tlacitko bez-okraje" data-akce="tydenPosun" data-smer="1" aria-label="Další týden"' + (posunTydne >= 0 ? ' disabled' : '') + '>›</button>' +
     '</div><div class="tyden" data-tyden-swipe="1">' + tydenHtml + '</div>' +
       '<p class="tlumene male">Šipkami nebo přejetím prstem se dostaneš do starších týdnů. Číslo v kolečku je počet záznamů. Klepnutím na den otevřeš jeho ohlédnutí' + (nastaveni.barva_dne_zapnuta ? ', u dne bez ohlédnutí zvolíš barvu.' : '.') + '</p></section>' +
-    (seznam ? '<section class="seznam" aria-label="Poslední záznamy"><h2>Poslední záznamy</h2>' + seznam + '</section>' : '') +
+    (seznam ? '<section class="seznam" aria-label="Poslední záznamy"><h2>Poslední záznamy</h2>' + seznam + '</section>'
+      : '<section class="karta jemna"><h2>Tady budou Tvoje záznamy</h2><p class="tlumene">Stačí jedno slovo nebo číslo. Začni tlačítkem Zaznamenat nahoře, nebo se večer ohlédni za dnem.</p></section>') +
+    backupReminderCard(vse.length) +
     '</main>' + navigace('domov');
 }
 
@@ -522,7 +539,8 @@ function obrazovkaZaznam() {
     hnev += '</div>';
   }
 
-  const umiDiktovat = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  const prohlizecUmi = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  const umiDiktovat = isDictationEnabled();
   const diktTlacitko = tlacitkoDiktovani('text');
 
   return '<header class="hlavicka">' +
@@ -532,16 +550,17 @@ function obrazovkaZaznam() {
     '</header>' +
     '<main class="obsah">' +
       '<section style="display:flex;flex-direction:column;gap:12px">' +
-        '<h1 style="font-size:24px">Jaká je pro Tebe tahle chvíle?</h1>' +
+        '<h1 style="font-size:1.5rem">Jaká je pro Tebe tahle chvíle?</h1>' +
         '<div class="skala" role="group" aria-label="Od −3 velmi nepříjemná do +3 velmi příjemná">' + skala + '</div>' +
         '<div class="skala-popisky"><span>velmi nepříjemná</span><span>ani tak, ani tak</span><span>velmi příjemná</span></div>' +
       '</section>' +
       '<section style="display:flex;flex-direction:column;gap:12px">' +
-        '<label for="text" style="font-family:var(--nadpisy);font-size:24px">Co tak zhruba cítíš?</label>' +
+        '<label for="text" style="font-family:var(--nadpisy);font-size:1.5rem">Co tak zhruba cítíš?</label>' +
         '<div class="pole">' +
           '<textarea id="text" rows="4" placeholder="Napiš nebo nadiktuj, co je teď živé…">' + h(k.text) + '</textarea>' +
           '<div class="pole-radek"><span class="tlumene male">' +
-            (umiDiktovat ? 'Diktování zpracovává Google. Můžeš použít i mikrofon na klávesnici.' : 'Diktovat můžeš mikrofonem na klávesnici.') +
+            (umiDiktovat ? 'Diktování zpracovává Google. Můžeš použít i mikrofon na klávesnici.'
+              : 'Diktovat můžeš mikrofonem na klávesnici.' + (!prohlizecUmi || nastaveni.diktovani_zapnuto ? '' : ' Tlačítko Diktovat zapneš v <a href="#/nastaveni">Nastavení</a>.')) +
           '</span>' + diktTlacitko + '</div>' +
         '</div>' +
         blokFotky(k) +
@@ -688,8 +707,12 @@ function obrazovkaZaznamDal() {
 // políčka na obrazovce se slova vepíšou.
 const ID_POLE = { text: 'text', strategie: 'pole-strategie', prosba: 'prosba', bolestSlova: 'bolest-slova' };
 
+// Diktování v aplikaci jde jen se souhlasem (Nastavení). Bez něj zůstává mikrofon na klávesnici.
+function isDictationEnabled() {
+  return !!nastaveni.diktovani_zapnuto && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+}
 function tlacitkoDiktovani(cil) {
-  if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) return '';
+  if (!isDictationEnabled()) return '';
   const bezi = diktovani && diktovaniCil === cil;
   return '<button type="button" class="tlacitko obrys male-t" data-akce="diktovat" data-cil="' + cil + '">' +
     IKONA.mikrofon + (bezi ? 'Poslouchám… klepni pro konec' : 'Diktovat') + '</button>';
@@ -917,9 +940,13 @@ async function pripravVecer(datum) {
       sKym: z.s_kym || [], kde: z.kde, hodnotit: z.prijemnost != null || !!z.vlastni_slova,
       prijemnost: z.prijemnost, text: z.vlastni_slova || '', smysluplnost: z.smysluplnost ?? null,
       vyzkum: Object.fromEntries(Object.entries(z.vyzkum || {}).filter(([, v]) => v != null)),
-      ulozeny: true, puvodni: z
+      ulozeny: true, puvodni: z, zdroj: z.zdroj_okamzity || null
     }))
   };
+  // Okamžité záznamy z toho dne – v rozvrhu se nabídnou jako šedé bloky.
+  vecer.okamzite = (await U.getEntries())
+    .filter(z => z.typ === 'okamzity' && z.chvile_od.slice(0, 10) === datum)
+    .sort((a, b) => a.chvile_od.localeCompare(b.chvile_od));
   const den = await U.getDay(datum);
   if (vecer.bloky.length && den && den.vecerni_hotovo) vecer.krok = 'shrnuti';
   if (!vecer.bloky.length) {
@@ -983,8 +1010,11 @@ async function ulozVecer(hotovo = true) {
       smysluplnost: b.hodnotit ? b.smysluplnost : null,
       vyzkum: b.hodnotit && Object.keys(b.vyzkum).length ? Object.fromEntries(S.VYZKUM.map(v => [v.klic, b.vyzkum[v.klic] ?? null])) : null,
       popis_bloku: b.popis.trim(), cinnost: [...b.cinnost], s_kym: b.sKym, kde: b.kde,
-      emoce: zaklad.emoce || [], telo: zaklad.telo || [], potreby: zaklad.potreby || [],
-      strategie: zaklad.strategie || '', prosba: zaklad.prosba || '', fotka: zaklad.fotka || null,
+      emoce: zaklad.emoce || (b.prevzate && b.prevzate.emoce) || [], telo: zaklad.telo || (b.prevzate && b.prevzate.telo) || [],
+      potreby: zaklad.potreby || (b.prevzate && b.prevzate.potreby) || [],
+      strategie: zaklad.strategie || (b.prevzate && b.prevzate.strategie) || '', prosba: zaklad.prosba || (b.prevzate && b.prevzate.prosba) || '',
+      fotka: zaklad.fotka || (b.prevzate && b.prevzate.fotka) || null,
+      zdroj_okamzity: b.zdroj || null,
       zdroj_textu: b.text.trim() ? (zaklad.zdroj_textu || 'psano') : null,
       verze_protokolu: S.VERZE_PROTOKOLU
     });
@@ -1035,7 +1065,7 @@ function editorBloku(b) {
   // Každá otázka je samostatný oddíl s čárou nahoře, ať je jasné, kde která nabídka končí.
   const oddil = (nadpis, obsah, pro) => '<div class="oddil">' +
     (pro ? '<label class="oddil-nadpis" for="' + pro + '">' : '<h3 class="oddil-nadpis">') + nadpis + (pro ? '</label>' : '</h3>') + obsah + '</div>';
-  return '<section class="karta">' +
+  return '<section class="karta editor-bloku">' +
     '<h2>' + (vecer.upravovany === 'novy' ? (vecer.bloky.length ? 'Další blok dne' : 'První blok dne') : 'Upravit blok') + '</h2>' +
     oddil('Co jsi ' + tvar('dělala', 'dělal') + '? <span class="oddil-pozn">Můžeš vybrat i dvě činnosti, pokud probíhaly společně. Např. vaření a podcast.</span>',
       '<div class="cipy">' + cinnosti + '</div>' + (plno ? '<p class="tlumene male">Vybrané jsou dvě činnosti. Jinou zvolíš, když jednu z nich zrušíš.</p>' : vlastni)) +
@@ -1083,7 +1113,7 @@ async function obrazovkaVecer(parametr) {
     const kdy = d.getDate() + '. ' + (d.getMonth() + 1) + '. (' + new Intl.DateTimeFormat('cs-CZ', { weekday: 'long' }).format(d) + ')';
     return hlavickaVecera(nazevDneVecera(), '#/domov') +
       '<main class="obsah">' +
-        '<h1 style="font-size:26px">Jak chceš začít?</h1>' +
+        '<h1 style="font-size:1.625rem">Jak chceš začít?</h1>' +
         '<button type="button" class="karta" style="text-align:left;cursor:pointer;font:inherit" data-akce="vecerNacist">' +
           '<h2>Načíst předchozí rozvrh</h2><p class="tlumene">Rozvrh ze dne ' + h(kdy) + '. Bloky si pak upravíš. Hodnocení chvil se nepřebírá.</p></button>' +
         '<button type="button" class="karta" style="text-align:left;cursor:pointer;font:inherit" data-akce="vecerNovy">' +
@@ -1119,14 +1149,26 @@ async function obrazovkaVecer(parametr) {
         '<span class="znamka">' + (i + 1) + '</span><div>' + (b.popis.trim() ? '<div style="font-weight:600">' + h(b.popis.trim()) + '</div><div class="tlumene male">' + h(popisBloku(b)) + '</div>' : h(popisBloku(b))) +
         '</div><span class="sipka" aria-hidden="true">›</span></button>';
     });
+    // Šedé bloky: okamžité záznamy z toho dne, které ještě nejsou v rozvrhu.
+    const pouzite = new Set(v.bloky.map(b => b.zdroj).concat(v.rozpracovany ? [v.rozpracovany.zdroj] : []).filter(Boolean));
+    const volne = (v.okamzite || []).filter(z => !pouzite.has(z.id));
+    const sede = volne.length
+      ? '<section class="sede-bloky"><h2 class="oddil-nadpis">Okamžité záznamy z ' + (v.datum === U.dayDate() ? 'dneška' : 'toho dne') + '</h2>' +
+        volne.map(z => {
+          const cas = new Date(z.chvile_od); const hm = cas.getHours() + ':' + String(cas.getMinutes()).padStart(2, '0');
+          return '<div class="sedy-blok"><div><div class="tlumene male">' + hm + ' · okamžitý záznam</div><div>' + h(shrnutiZaznamu(z)) + '</div></div>' +
+            '<button type="button" class="tlacitko obrys male-t" data-akce="entryToEveningBlock" data-id="' + h(z.id) + '">Přidat do ohlédnutí</button></div>';
+        }).join('') +
+        '<p class="tlumene male">Z okamžitého záznamu se stane blok dne. Převezme činnost, s kým a kde, příjemnost i vlastní slova. Délku doplníš.</p></section>'
+      : '';
     const novy = v.upravovany === 'novy' ? editorBloku(v.rozpracovany) : '';
     const pridat = v.upravovany === null
       ? '<button type="button" class="tlacitko obrys" style="align-self:flex-start" data-akce="blokNovy">+ Přidat další blok</button>' : '';
     return hlavickaVecera(nazevDneVecera(), '#/domov') +
       '<main class="obsah">' +
-        '<div><h1 style="font-size:26px">Co jsi ' + (v.datum === U.dayDate() ? 'dnes' : 'ten den') + ' ' + tvar('dělala', 'dělal') + '?</h1>' +
+        '<div><h1 style="font-size:1.625rem">Co jsi ' + (v.datum === U.dayDate() ? 'dnes' : 'ten den') + ' ' + tvar('dělala', 'dělal') + '?</h1>' +
         '<p class="tlumene">Rozlož si den do bloků, jak šly po sobě. Stačí zhruba. Noční spánek se nezapisuje.</p></div>' +
-        nacist +
+        nacist + sede +
         (seznam ? '<div class="seznam" id="seznam-bloku">' + seznam + '</div>' +
           (v.bloky.length > 1 && v.upravovany === null ? '<p class="tlumene male">Pořadí změníš, když blok podržíš a přetáhneš nahoru nebo dolů.</p>' : '') : '') + novy + pridat +
       '</main>' +
@@ -1183,7 +1225,7 @@ async function obrazovkaVecer(parametr) {
         '</div></section>' : '';
     return hlavickaVecera(nazevDneVecera(), '#/vecer/' + v.datum) +
       '<main class="obsah">' +
-        '<div><h1 style="font-size:26px">Pár chvil z Tvého dne</h1><p class="tlumene">Kteroukoli chvíli můžeš vynechat – tlačítkem, nebo ji prostě nevyplň.</p></div>' +
+        '<div><h1 style="font-size:1.625rem">Pár chvil z Tvého dne</h1><p class="tlumene">Kteroukoli chvíli můžeš vynechat – tlačítkem, nebo ji prostě nevyplň.</p></div>' +
         karty + dalsi +
       '</main>' +
       '<footer class="spodni-lista">' +
@@ -1196,7 +1238,7 @@ async function obrazovkaVecer(parametr) {
   if (v.krok === 'barva') {
     const den = (await U.getDay(v.datum)) || {};
     return hlavickaVecera(nazevDneVecera(), '#/vecer/' + v.datum) +
-      '<main class="obsah"><section class="karta"><h1 style="font-size:26px">Jakou barvu ' + (v.datum === U.dayDate() ? 'má' : 'měl') + ' Tvůj den?</h1>' +
+      '<main class="obsah"><section class="karta"><h1 style="font-size:1.625rem">Jakou barvu ' + (v.datum === U.dayDate() ? 'má' : 'měl') + ' Tvůj den?</h1>' +
         paletaBarev(v.datum, den.barva) +
         '<div class="odkazy"><label class="tlacitko obrys male-t" style="cursor:pointer">Jiná barva…' +
           '<input type="color" class="skryte" data-akce="barvaVlastni" data-datum="' + v.datum + '" value="' + (den.barva || '#72B97F') + '"></label>' +
@@ -1326,10 +1368,10 @@ function panelSdileni(v, okamzite, hodiny, cas, celkem, hodnocene, fotky, barvaD
     '<span class="panel-nadpis">Tvar obrázku</span><div class="cipy">' +
       cip('příspěvek', sdileni.format === 'prispevek', 'sdiletFormat', { format: 'prispevek' }) +
       cip('příběh (na výšku)', sdileni.format === 'pribeh', 'sdiletFormat', { format: 'pribeh' }) + '</div>' +
-    '<label class="prepinac-maly" style="font-size:15px"><input type="checkbox" data-akce="sdiletSlova"' + (sdileni.slova ? ' checked' : '') + '>Přidat moje vlastní slova</label>' +
-    (okamzite.length ? '<label class="prepinac-maly" style="font-size:15px"><input type="checkbox" data-akce="sdiletOkamzite"' + (sdileni.okamzite ? ' checked' : '') + '>Přidat okamžité záznamy</label>' : '') +
-    (oslavy.length ? '<label class="prepinac-maly" style="font-size:15px"><input type="checkbox" data-akce="sdiletOslavy"' + (sdileni.oslavy ? ' checked' : '') + '>Přidat oslavu</label>' : '') +
-    (fotky.length ? '<label class="prepinac-maly" style="font-size:15px"><input type="checkbox" data-akce="sdiletFotky"' + (sdileni.fotky ? ' checked' : '') + '>Přidat miniatury fotek</label>' : '') +
+    '<label class="prepinac-maly" style="font-size:0.9375rem"><input type="checkbox" data-akce="sdiletSlova"' + (sdileni.slova ? ' checked' : '') + '>Přidat moje vlastní slova</label>' +
+    (okamzite.length ? '<label class="prepinac-maly" style="font-size:0.9375rem"><input type="checkbox" data-akce="sdiletOkamzite"' + (sdileni.okamzite ? ' checked' : '') + '>Přidat okamžité záznamy</label>' : '') +
+    (oslavy.length ? '<label class="prepinac-maly" style="font-size:0.9375rem"><input type="checkbox" data-akce="sdiletOslavy"' + (sdileni.oslavy ? ' checked' : '') + '>Přidat oslavu</label>' : '') +
+    (fotky.length ? '<label class="prepinac-maly" style="font-size:0.9375rem"><input type="checkbox" data-akce="sdiletFotky"' + (sdileni.fotky ? ' checked' : '') + '>Přidat miniatury fotek</label>' : '') +
     nahled +
     '<pre class="nahled-sdileni skryte">' + h(text) + '</pre>' +
     '<p class="tlumene male">Komentář se nepřidá do obrázku – pošle se jako text k němu (na Facebooku třeba jako popisek příběhu).</p>' +
@@ -1699,6 +1741,8 @@ function nahledyFotek(zaznamy) {
 let oslava = null;
 let posunTydne = 0;  // přehled týdnů na Domově: 0 = tento týden, -1 = minulý…
 let prehled = { mesic: 0, den: null }; // Můj přehled: posun měsíce a vybraný den
+let overviewCelebration = null;
+let onboarding = { step: 0, consent: false, summary: false, dictation: false };  // první spuštění
 let prosba = null;  // rozepsaná prosba (jen v paměti)
 let sdileniOslavy = null; // sdílení jedné oslavy (obrázek s textem)
 let posledniOslava = null; // naposledy uložená oslava – aby šla hned sdílet
@@ -1771,7 +1815,7 @@ function obrazovkaOslava() {
       '<a class="ikona-tlacitko bez-okraje" href="' + o.zpet + '" aria-label="Zpět">' + IKONA.zpet + '</a>' +
       '<span class="nazev-obrazovky">Oslava</span></header>' +
     '<main class="obsah">' +
-      '<div class="oddil" style="border-top:none;padding-top:0;margin-top:0"><label class="oddil-nadpis" for="oslava-text" style="font-size:26px">Dnes chci oslavit…</label>' +
+      '<div class="oddil" style="border-top:none;padding-top:0;margin-top:0"><label class="oddil-nadpis" for="oslava-text" style="font-size:1.625rem">Dnes chci oslavit…</label>' +
         pole('text', 'oslava-text', 'Dnes chci oslavit', 'Napiš nebo nadiktuj, co se povedlo, co Tě potěšilo…') + '</div>' +
       '<div class="oddil"><h3 class="oddil-nadpis">Jaké potřeby byly naplněny?</h3>' +
         '<div class="cipy">' + skupiny + '</div>' + vlastni + panel +
@@ -2281,6 +2325,43 @@ function skorWho5(odpovedi) {
 
 let tyden = null; // rozpracované týdenní ohlédnutí
 
+// Oslava týdne: věta z toho, co bylo v týdnu dobré, a animace podle nejnaplněnější potřeby.
+function weekCelebration(weekCode, entries) {
+  return periodCelebration(rozsahTydne(weekCode), entries, 'Tento týden');
+}
+// r = { od, do } (data ve tvaru 2026-11-09), uvod = „Tento týden“ / „Posledních 30 dní“
+function periodCelebration(range, entries, label) {
+  const periodEntries = entries.filter(z => { const d = z.chvile_od.slice(0, 10); return d >= range.od && d <= range.do; });
+  // Činnost s nejvyšší průměrnou příjemností (jen příjemné, přednost mají ty, co se opakovaly)
+  const activityRatings = new Map();
+  for (const z of periodEntries) {
+    if (z.typ !== 'vecerni' || z.poradi == null || z.prijemnost == null) continue;
+    for (const c of (z.cinnost || [])) { if (!activityRatings.has(c)) activityRatings.set(c, []); activityRatings.get(c).push(z.prijemnost); }
+  }
+  const activities = [...activityRatings].map(([c, h]) => ({ c, prumer: h.reduce((a, b) => a + b, 0) / h.length, pocet: h.length }))
+    .filter(x => x.prumer > 0).sort((a, b) => (b.prumer + Math.min(b.pocet, 3) * .2) - (a.prumer + Math.min(a.pocet, 3) * .2));
+  // Potřeby: průměrné naplnění za týden
+  const needs = new Map();
+  for (const z of periodEntries) for (const p of (z.potreby || [])) {
+    if (p.naplneni == null) continue;
+    if (!needs.has(p.potreba)) needs.set(p.potreba, []);
+    needs.get(p.potreba).push(p.naplneni);
+  }
+  const averages = Object.fromEntries([...needs].map(([p, h]) => [p, { naplneni: h.reduce((a, b) => a + b, 0) / h.length }]));
+  const strongestNeed = Object.entries(averages).sort((a, b) => b[1].naplneni - a[1].naplneni)[0];
+  let text;
+  const isWeek = label === 'Tento týden';
+  if (activities.length) text = label + ' ses nejlépe ' + tvar('cítila', 'cítil') + ' u činnosti „' + activities[0].c + '“!';
+  else if (strongestNeed && strongestNeed[1].naplneni >= 2) text = label + ' byla nejvíc naplněná Tvoje potřeba „' + strongestNeed[0] + '“!';
+  else if (isWeek) {
+    // Záložní věty pro týden – střídají se podle týdne.
+    const fallbackMessages = ['Byl to naplněný týden ověnčený Tvou všímavostí!', 'To byl tedy týden!', 'Bylo to dobré a bylo toho dost!'];
+    text = periodEntries.length ? fallbackMessages[pondeliZKodu(kodTydne(new Date(range.od + 'T12:00:00'))).getDate() % 3] : 'To byl tedy týden!';
+  }
+  else text = periodEntries.length ? 'Všímáš si svých dnů – to stojí za oslavu!' : 'Jsi tu – to stojí za oslavu!';
+  return { text, druh: Object.keys(averages).length ? druhOslavy(averages) : 'konfety' };
+}
+
 async function pripravTyden(kod) {
   const ulozeny = await U.getWeek(kod);
   const vse = await U.getEntries();
@@ -2304,6 +2385,7 @@ async function pripravTyden(kod) {
     ukazatWho5: !!(ulozeny && ulozeny.who5) || !who5Minule,
     ulozeny: ulozeny || null
   };
+  tyden.oslava = weekCelebration(kod, vse);
   const r = tyden.data.rozsah;
   for (let d = new Date(r.od + 'T12:00:00'); U.dayDate(d) <= r.do; d.setDate(d.getDate() + 1)) {
     const den = await U.getDay(U.dayDate(d));
@@ -2363,7 +2445,7 @@ function obrazovkaTyden() {
       '<span class="nazev-obrazovky">Týden ' + h(t.data.rozsah.text) + '</span></header>' +
     '<main class="obsah">' +
       '<h1>Tvůj týden</h1>' +
-      '<section class="karta"><h2>Jak se Ti čas rozdělil</h2>' + cas +
+      '<section class="karta"><h2>U-index týdne</h2>' + cas + INDEX_EXPLANATION +
         '<p class="tlumene male">Záznamů za týden: ' + t.data.pocet + '</p></section>' +
       barva +
       '<section class="karta">' +
@@ -2372,12 +2454,21 @@ function obrazovkaTyden() {
         otazka('dal', 'Co z tohoto týdne s Tebou půjde dál životem?') +
       '</section>' +
       who5 +
-      '<p class="tlumene male">Uloží se jen v tomto telefonu.</p>' +
+      '<section class="karta nabidka-oslavy"><h2>Oslava týdne</h2><p>' + h(t.oslava.text) + '</p>' +
+        '<button type="button" class="tlacitko" style="align-self:flex-start" data-akce="celebrateWeek">Oslavit!</button>' +
+        griefNote() + '</section>' +
+      (nastaveni.souhrn_zapnut && t.ulozeny && t.ulozeny.vyplneno ? '<a class="tlacitko obrys male-t" style="align-self:flex-start" href="#/souhrn/' + t.kod + '">Poslat souhrn týdne</a>' : '') +
+      '<p class="tlumene male">Uloží se jen v tomto telefonu.' + (nastaveni.souhrn_zapnut ? ' Souhrn bez textů se nabídne po uložení.' : '') + '</p>' +
     '</main>' +
     '<footer class="spodni-lista">' +
       '<a class="tlacitko obrys" href="#/domov">Teď ne</a>' +
       '<button type="button" class="tlacitko" data-akce="tydenUlozit">Uložit</button>' +
     '</footer>';
+}
+
+function griefNote() {
+  return '<p class="tlumene male">' + tvar('Ocenila', 'Ocenil') + ' bys tu i možnost odtruchlit si to, co se nepovedlo nebo co Ti chybí? ' +
+    'Dej vědět autorce na <a href="mailto:mamse.projekt@gmail.com?subject=Odtruchlení%20v%20aplikaci%20M%C3%A1m%20se!">mamse.projekt@gmail.com</a>.</p>';
 }
 
 // ---------------- MŮJ PŘEHLED ----------------
@@ -2533,6 +2624,9 @@ async function obrazovkaPrehled() {
     : '';
 
   const sv = souvislosti(vse);
+  // Oslava v Přehledu vychází z posledních 7 dní (tento týden).
+  const dnesD = new Date(); const pred7 = new Date(); pred7.setDate(pred7.getDate() - 6);
+  overviewCelebration = periodCelebration({ od: U.dayDate(pred7), do: U.dayDate(dnesD) }, vse, 'Tento týden');
   const souvis = '<section class="karta jemna"><h2>Souvislosti</h2>' +
     (sv.vety.length ? sv.vety.map(v => '<p>' + h(v) + '</p>').join('') + '<p class="tlumene male">Je to souvislost, ne příčina. Co z toho platí, víš nejlíp Ty.</p>'
       : '<p class="tlumene">' + (sv.malo ? 'Souvislosti se ukážou, až bude ve večerních ohlédnutích za poslední 4 týdny aspoň 8 ohodnocených chvil.' : 'Zatím se v Tvých záznamech nic výrazně neopakuje spolu.') + '</p>') +
@@ -2547,18 +2641,172 @@ async function obrazovkaPrehled() {
         '</div><div class="kalendar" data-mesic-swipe="1">' + kal + '</div>' +
         '<p class="tlumene male">Klepnutím na den uvidíš jeho shrnutí.</p></section>' +
       kartaDne +
-      '<section class="karta"><h2>Průběh týdnů</h2>' +
+      '<section class="karta"><h2>Průběžný U-index</h2>' +
         (maTydny ? '<div class="tydny-prehled">' + radkyTydnu + '</div><div class="legenda">' +
           '<span class="legenda-polozka"><i class="legenda-znak" style="background:' + KATEGORIE.prijemna.barva + '"></i>příjemný</span>' +
           '<span class="legenda-polozka"><i class="legenda-znak" style="background:' + KATEGORIE.neutralni.barva + '"></i>ani tak, ani tak</span>' +
           '<span class="legenda-polozka"><i class="legenda-znak" style="background:' + KATEGORIE.neprijemna.barva + '"></i>nepříjemný</span></div>' +
           '<p class="tlumene male">Podíly času z ohodnocených chvil večerního ohlédnutí. Týdny s ohlédnutím jdou otevřít.</p>'
           : '<p class="tlumene">Tady se ukáže, jak se Ti čas v jednotlivých týdnech rozděloval, až začneš ohodnocovat chvíle ve večerním ohlédnutí.</p>') +
+        INDEX_EXPLANATION +
       '</section>' +
       who5 + vrstvy + souvis +
+      '<section class="karta nabidka-oslavy"><h2>Oslava týdne</h2><p>' + h(overviewCelebration.text) + '</p>' +
+        '<div class="dvojice"><button type="button" class="tlacitko" data-akce="celebrateOverview">Oslavit!</button>' +
+        '<a class="tlacitko obrys" href="#/domov">Zpět</a></div>' + griefNote() + '</section>' +
       '<p class="tlumene male">Všechno se počítá jen v tomto telefonu.</p>' +
     '</main>' + navigace('prehled');
 }
+
+// ---------------- TÝDENNÍ SOUHRN DO SPOLEČNÉ TABULKY ----------------
+// Jen se souhlasem. Aplikace ukáže náhled „Tohle a nic jiného odejde“ a otevře
+// předvyplněný Google formulář – odeslat ho musí člověk sám.
+
+const SUMMARY_FORM = {
+  url: 'https://docs.google.com/forms/d/e/1FAIpQLScfaQSVIWPKiXQlEyi__YFiYNFMJjWq1bi4Hs3tGwZm-4jDqA/viewform',
+  pole: {
+    tyden: 'entry.1512813664', barva: 'entry.160603150', prijemny: 'entry.1261690267', neutralni: 'entry.1325645010',
+    neprijemny: 'entry.425241383', pocet: 'entry.1395908083', who5: 'entry.934652898', kod: 'entry.1635154973', verze: 'entry.9703391'
+  }
+};
+const SUMMARY_CONSENT_VERSION = 'souhrn-1';
+
+function summaryValues(week) {
+  const fields = [['tyden', 'Týden', week.tyden]];
+  if (week.barva) fields.push(['barva', 'Barva týdne', week.barva]);
+  if (week.podily) {
+    fields.push(['prijemny', 'Příjemný čas', week.podily.prijemny + ' %']);
+    fields.push(['neutralni', 'Neutrální čas', week.podily.neutralni + ' %']);
+    fields.push(['neprijemny', 'Nepříjemný čas', week.podily.neprijemny + ' %']);
+  }
+  fields.push(['pocet', 'Počet záznamů', String(week.pocet_zaznamu ?? 0)]);
+  if (week.who5) fields.push(['who5', 'WHO-5', String(week.who5.index)]);
+  if (nastaveni.kod_ucastnika) fields.push(['kod', 'Kód účastníka', nastaveni.kod_ucastnika]);
+  fields.push(['verze', 'Verze aplikace', U.appVersion]);
+  return fields;
+}
+
+function summaryLink(week) {
+  const params = new URLSearchParams({ usp: 'pp_url' });
+  for (const [k, , v] of summaryValues(week)) params.set(SUMMARY_FORM.pole[k], v.replace(' %', ''));
+  return SUMMARY_FORM.url + '?' + params.toString();
+}
+
+async function renderWeekSummary(weekCode) {
+  const week = await U.getWeek(weekCode);
+  if (!week || !week.vyplneno) { location.hash = '#/domov'; return ''; }
+  const back = '#/domov';
+  if (!nastaveni.souhrn_zapnut) {
+    return '<header class="hlavicka"><a class="ikona-tlacitko bez-okraje" href="' + back + '" aria-label="Zpět">' + IKONA.zpet + '</a><span class="nazev-obrazovky">Souhrn týdne</span></header>' +
+      '<main class="obsah"><p>Posílání souhrnu je vypnuté. Zapnout ho můžeš v <a href="#/nastaveni">Nastavení</a>.</p></main>';
+  }
+  return '<header class="hlavicka"><a class="ikona-tlacitko bez-okraje" href="' + back + '" aria-label="Zpět">' + IKONA.zpet + '</a>' +
+      '<span class="nazev-obrazovky">Souhrn týdne ' + h(rozsahTydne(weekCode).text) + '</span></header>' +
+    '<main class="obsah">' +
+      '<h1>Chceš poslat souhrn?</h1>' +
+      '<p class="tlumene">Pomůžeš tím zjistit, jak se máme dohromady. Souhrn jde do společné tabulky bez jména.</p>' +
+      '<section class="karta"><h2>Tohle a nic jiného odejde</h2><dl class="souhrn-seznam">' +
+        summaryValues(week).map(([, n, v]) => '<dt>' + h(n) + '</dt><dd>' + h(v) + '</dd>').join('') + '</dl>' +
+        '<p class="tlumene male">Nikdy neodchází: Tvoje texty, činnosti, místa, jména, přesné časy ani nic z deníku.</p></section>' +
+      '<p class="tlumene male">Otevře se Google formulář s těmito hodnotami. Odešle se, až v něm ' + tvar('sama', 'sám') + ' klepneš na Odeslat. Google přitom uvidí, že formulář někdo vyplnil (jako u každé webové stránky).</p>' +
+      '<div class="dvojice"><a class="tlacitko" href="' + h(summaryLink(week)) + '" target="_blank" rel="noopener" data-akce="markSummaryOpened" data-kod="' + weekCode + '">Otevřít formulář</a>' +
+      '<a class="tlacitko obrys" href="' + back + '">Teď ne</a></div>' +
+      (week.souhrn_otevren ? '<p class="tlumene male">Formulář pro tento týden už jsi ' + tvar('otevřela', 'otevřel') + ' ' + new Date(week.souhrn_otevren).toLocaleDateString('cs-CZ') + '. Posílej ho jen jednou.</p>' : '') +
+    '</main>';
+}
+
+// ---------------- PRVNÍ SPUŠTĚNÍ ----------------
+// Tři krátké kroky: co aplikace je, souhlasy a oslovení, přidání na plochu.
+// Kdo už má v aplikaci záznamy (starší verze), úvod nevidí.
+
+// České klíče jsou součástí původního formátu zálohy. Programové API je EN.
+function createConsent(subject, enabled, textVersion) {
+  return { id: U.newId(), co: subject, zapnuto: enabled, verze_textu: textVersion, kdy: U.timestamp() };
+}
+let preferenceWrites = Promise.resolve();
+async function savePreferences(changes, consents = []) {
+  // Dva rychlé přepínače nesmějí sestavit dva snapshoty ze stejného starého
+  // nastavení. Nový stav skládáme až po potvrzení předchozí změny.
+  const write = preferenceWrites.then(async () => {
+    const next = { ...nastaveni, ...changes };
+    await U.saveSettings(next, consents);
+    nastaveni = next;
+  });
+  preferenceWrites = write.catch(() => {}); // Chybu hlásí volající přes runAction.
+  await write;
+}
+
+function isOnboardingComplete() {
+  return !!nastaveni.prvni_spusteni_hotovo;
+}
+
+function renderOnboarding() {
+  const state = onboarding;
+  const dots = '<div class="uvod-tecky" aria-hidden="true">' + [0, 1, 2].map(i => '<i' + (i === state.step ? ' class="tady"' : '') + '></i>').join('') + '</div>';
+  const stepLabel = '<p class="skryte">Krok ' + (state.step + 1) + ' ze 3</p>';
+  if (state.step === 0) {
+    return '<main class="obsah uvod">' + stepLabel +
+      '<img class="uvod-logo" src="ikony/logo.svg" alt="">' +
+      '<h1>Vítej v Mám se!</h1>' +
+      '<p>Mám se! je osobní deník pohody. Pomáhá Ti všímat si, co cítíš, co potřebuješ a co Ti dělá dobře.</p>' +
+      '<p>Není to léčba ani diagnostika a nenahrazuje lékaře ani terapii.</p>' +
+      '<p>Všechno, co zapíšeš, zůstává jen v tomto telefonu.</p>' +
+      '<details class="tipy"><summary>Jaká data sbíráme a proč</summary><ul class="male">' +
+        '<li><b>Tvůj deník</b> (záznamy, ohlédnutí, fotky, nastavení) se ukládá jen v tomto telefonu. Autorka aplikace ho nevidí a nikam se neposílá.</li>' +
+        '<li><b>Týdenní souhrn</b> pár čísel bez jména jde do společné tabulky jen tehdy, když to dovolíš a pokaždé ho ' + tvar('sama', 'sám') + ' odešleš.</li>' +
+        '<li><b>Diktování</b> tlačítkem v aplikaci je dobrovolné a jde jen s Tvým souhlasem. Řeč při něm zpracuje Google přes Tvůj prohlížeč.</li>' +
+        '<li><b>Sdílení</b> snímku dne, oslavy nebo prosby proběhne jen na Tvůj pokyn a vždy s náhledem.</li>' +
+      '</ul></details>' +
+      dots +
+      '<button type="button" class="tlacitko" data-akce="onboardingNext">Pokračovat</button>' +
+      '<a class="tlacitko-pomoc" href="#/pomoc">' + IKONA.srdce + 'Potřebuju pomoc hned</a>' +
+    '</main>';
+  }
+  if (state.step === 1) {
+    const addressOption = (value, text) => '<label class="prepinac-maly"><input type="radio" name="osloveni" value="' + value + '" data-akce="onboardingAddress"' +
+      (nastaveni.tvar_osloveni === value ? ' checked' : '') + '>' + text + '</label>';
+    return '<main class="obsah uvod">' + stepLabel +
+      '<h1>Než začneme</h1>' +
+      '<section class="karta"><h2>Souhlas</h2>' +
+        '<label class="prepinac-maly"><input type="checkbox" data-akce="onboardingConsent"' + (state.consent ? ' checked' : '') + '><span>Souhlasím s používáním aplikace a s ukládáním deníku v tomto telefonu.</span></label>' +
+        '<p class="tlumene male">Bez tohoto souhlasu aplikace nejde používat. Data kdykoli smažeš v Nastavení.</p>' +
+        '<label class="prepinac-maly"><input type="checkbox" data-akce="onboardingSummary"' + (state.summary ? ' checked' : '') + '><span>Chci posílat týdenní souhrn bez jména do společné tabulky. <span class="tlumene">(nepovinné)</span></span></label>' +
+        '<p class="tlumene male">Pár čísel za týden, žádné texty. Pokaždé uvidíš náhled a odešleš ho ' + tvar('sama', 'sám') + '. Jde zapnout i později.</p>' +
+        '<label class="prepinac-maly"><input type="checkbox" data-akce="onboardingDictation"' + (state.dictation ? ' checked' : '') + '><span>Chci tlačítko Diktovat. <span class="tlumene">(nepovinné)</span></span></label>' +
+        '<p class="tlumene male">Řeč při něm zpracovává Google přes Tvůj prohlížeč. Bez souhlasu můžeš dál diktovat mikrofonem na klávesnici. Jde zapnout i později.</p>' +
+      '</section>' +
+      '<section class="karta"><h2>Jaký tvar sloves preferuješ?</h2>' +
+        addressOption('oba', 'byla/byl') + addressOption('zensky', 'byla') + addressOption('muzsky', 'byl') + '</section>' +
+      dots +
+      '<div class="dvojice"><button type="button" class="tlacitko obrys" data-akce="onboardingBack">Zpět</button>' +
+      '<button type="button" class="tlacitko" data-akce="onboardingNext"' + (state.consent ? '' : ' disabled') + '>Pokračovat</button></div>' +
+    '</main>';
+  }
+  return '<main class="obsah uvod">' + stepLabel +
+    '<h1>Dej si Mám se! na plochu</h1>' +
+    '<p>Bude se otevírat jako běžná aplikace a poběží i bez internetu.</p>' +
+    '<section class="karta"><h2>Android (Chrome)</h2><p>Klepni na <b>⋮</b> vpravo nahoře a vyber <b>Přidat na plochu</b> nebo <b>Instalovat aplikaci</b>.</p></section>' +
+    '<section class="karta"><h2>iPhone (Safari)</h2><p>Klepni na tlačítko <b>Sdílet</b> a vyber <b>Přidat na plochu</b>.</p></section>' +
+    '<p class="tlumene male">Připomínku, barvu dne a blízké lidi si můžeš nastavit hned, nebo kdykoli později v Nastavení. Máš zálohu z jiného telefonu? Nahraješ ji taky tam.</p>' +
+    dots +
+    '<button type="button" class="tlacitko" data-akce="completeOnboarding" data-kam="#/domov">Začít</button>' +
+    '<div class="dvojice"><button type="button" class="tlacitko obrys" data-akce="onboardingBack">Zpět</button>' +
+    '<button type="button" class="tlacitko obrys" data-akce="completeOnboarding" data-kam="#/nastaveni">Nejdřív nastavit</button></div>' +
+  '</main>';
+}
+
+// Vzhled: světlý, tmavý, nebo podle telefonu.
+function applyTheme() {
+  const theme = nastaveni.vzhled || 'svetly';
+  document.documentElement.dataset.vzhled = theme;
+  const isDark = theme === 'tmavy' || (theme === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = isDark ? '#17201C' : '#F7F2EA';
+}
+
+const INDEX_EXPLANATION = '<details class="tipy"><summary>Co je U-index?</summary><p class="male">U-index říká, jak velkou část času ' +
+  'člověk prožil v nepříjemných chvílích. Pochází z výzkumu D. Kahnemana a A. Kruegera. Tady vidíš celé rozdělení: ' +
+  'kolik času bylo příjemného, ani tak, ani tak a nepříjemného. Počítá se z chvil, které ohodnotíš ve večerním ohlédnutí.</p></details>';
 
 // ---------------- POMOC ----------------
 // Kontakty ověřené na webech provozovatelů 6. 11. 2026.
@@ -2709,7 +2957,7 @@ function souborIcs() {
 async function obrazovkaNastaveni() {
   const n = nastaveni;
   const odkliknuta = await U.getRecommendations();
-  const volba = (hodnota, text) => '<label class="prepinac-maly" style="font-size:15px"><input type="radio" name="osloveni" value="' + hodnota + '" data-akce="osloveni"' +
+  const volba = (hodnota, text) => '<label class="prepinac-maly" style="font-size:0.9375rem"><input type="radio" name="osloveni" value="' + hodnota + '" data-akce="osloveni"' +
     (n.tvar_osloveni === hodnota ? ' checked' : '') + '>' + text + '</label>';
 
   let kontakty = '';
@@ -2743,12 +2991,29 @@ async function obrazovkaNastaveni() {
         '<div class="odkazy"><a class="tlacitko male-t" href="' + h(odkazGoogleKalendar()) + '" target="_blank" rel="noopener">Přidat do Google Kalendáře</a>' +
         '<button type="button" class="tlacitko obrys male-t" data-akce="stahnoutIcs">Jiný kalendář (.ics)</button></div>' +
         '<p class="tlumene male">Když čas změníš, přidej připomínku znovu a tu starou v kalendáři smaž.</p></section>' +
+      '<section class="karta"><h2>Vzhled</h2>' +
+        [['svetly', 'Světlý'], ['tmavy', 'Tmavý'], ['auto', 'Podle telefonu']].map(([hodnota, text]) =>
+          '<label class="prepinac-maly"><input type="radio" name="vzhled" value="' + hodnota + '" data-akce="changeTheme"' + ((n.vzhled || 'svetly') === hodnota ? ' checked' : '') + '>' + text + '</label>').join('') +
+      '</section>' +
       '<section class="karta"><h2>Barva dne</h2>' +
-        '<label class="prepinac-maly" style="font-size:15px"><input type="checkbox" data-akce="barvyZapnute"' + (n.barva_dne_zapnuta ? ' checked' : '') + '>Chci si volit barvu dne</label>' +
+        '<label class="prepinac-maly" style="font-size:0.9375rem"><input type="checkbox" data-akce="barvyZapnute"' + (n.barva_dne_zapnuta ? ' checked' : '') + '>Chci si volit barvu dne</label>' +
         '<p class="tlumene male">Když je vypnutá, aplikace se na barvu neptá a dny ukazuje bez ní. Zvolené barvy zůstanou uložené.</p></section>' +
       '<section class="karta"><h2>Bolest</h2>' +
-        '<label class="prepinac-maly" style="font-size:15px"><input type="checkbox" data-akce="chronicka"' + (n.chronicka_bolest ? ' checked' : '') + '>Mám chronickou bolest – neupozorňuj mě na opakovanou bolest</label>' +
+        '<label class="prepinac-maly" style="font-size:0.9375rem"><input type="checkbox" data-akce="chronicka"' + (n.chronicka_bolest ? ' checked' : '') + '>Mám chronickou bolest – neupozorňuj mě na opakovanou bolest</label>' +
         '<h3>Přijatá doporučení</h3>' + doporuceni + '</section>' +
+      '<section class="karta"><h2>Diktování</h2>' +
+        '<label class="prepinac-maly" style="font-size:.9375rem"><input type="checkbox" data-akce="toggleDictation"' + (n.diktovani_zapnuto ? ' checked' : '') + '>Chci tlačítko Diktovat</label>' +
+        '<p class="tlumene male">Řeč při něm zpracovává Google přes Tvůj prohlížeč. Když je vypnuté, tlačítko se neukazuje a diktovat můžeš mikrofonem na klávesnici.' +
+        ((window.SpeechRecognition || window.webkitSpeechRecognition) ? '' : ' Tenhle prohlížeč diktování tlačítkem neumí.') + '</p></section>' +
+      '<section class="karta"><h2>Společné souhrny</h2>' +
+        '<label class="prepinac-maly" style="font-size:0.9375rem"><input type="checkbox" data-akce="toggleSummary"' + (n.souhrn_zapnut ? ' checked' : '') + '>Chci posílat týdenní souhrn do společné tabulky</label>' +
+        '<p class="tlumene male">Po týdenním ohlédnutí se nabídne náhled souhrnu: týden, barva týdne, podíly času, počet záznamů, případně WHO-5. ' +
+        'Žádné texty, činnosti, místa ani jména. Pokaždé ho odešleš ' + tvar('sama', 'sám') + ', nebo ne. Souhlas můžeš kdykoli vypnout.</p>' +
+        '<p class="tlumene male">V malé skupině lidí, kteří se znají, nejde zaručit úplnou anonymitu. Proto mluvíme o souhrnných datech bez jména.</p>' +
+        (n.souhrn_zapnut ? '<label class="prepinac-maly" style="font-size:0.9375rem"><input type="checkbox" data-akce="toggleParticipantCode"' + (n.kod_ucastnika ? ' checked' : '') + '>Přidávat náhodný kód' +
+          (n.kod_ucastnika ? ' (' + h(n.kod_ucastnika) + ')' : '') + '</label>' +
+          '<p class="tlumene male">Kód nic neprozrazuje, jen umožní vidět vývoj souhrnů v čase. Bez něj je každý týden samostatný.</p>' : '') +
+      '</section>' +
       '<section class="karta"><h2>Záloha</h2><p class="tlumene male">Všechno je jen v tomto telefonu. Když smažeš data prohlížeče nebo změníš telefon, bez zálohy o záznamy přijdeš. Záloha obsahuje osobní věci, dávej na ni pozor!</p>' +
         '<div class="odkazy"><button type="button" class="tlacitko male-t" data-akce="zaloha">Stáhnout zálohu</button>' +
         '<label class="tlacitko obrys male-t" style="cursor:pointer">Nahrát zálohu<input type="file" accept=".json,application/json" data-akce="nahrat" class="skryte"></label></div></section>' +
@@ -2829,9 +3094,47 @@ const AKCE = {
     prekresli();
   },
   // ---- Oslava ----
+  async celebrateOverview() { await spustOslavu(overviewCelebration.druh, overviewCelebration.text, await barvaDneK(U.dayDate())); },
   prehledMesic(d) { prehled.mesic = Math.min(0, prehled.mesic + (+d.smer)); prehled.den = null; prekresli(); },
   prehledDen(d) { prehled.den = prehled.den === d.datum ? null : d.datum; prekresli(); },
   tydenPosun(d) { posunTydne = Math.min(0, posunTydne + (+d.smer)); prekresli(); },
+  async celebrateWeek() { await spustOslavu(tyden.oslava.druh, tyden.oslava.text, tyden.barva || undefined); },
+  async markSummaryOpened(d) {
+    const t = await U.getWeek(d.kod);
+    if (t) { t.souhrn_otevren = U.timestamp(); await U.saveWeek(t); }
+    return true;   // odkaz se otevře normálně
+  },
+  async toggleDictation(d, el) {
+    if (!el.checked && diktovani) diktovani.stop();
+    await savePreferences({ diktovani_zapnuto: el.checked }, [createConsent('diktovani', el.checked, 'diktovani-1')]);
+    oznam(el.checked ? 'Diktování je zapnuté.' : 'Diktování je vypnuté. Mikrofon na klávesnici funguje dál.');
+  },
+  async toggleSummary(d, el) {
+    await savePreferences({ souhrn_zapnut: el.checked }, [createConsent('souhrn', el.checked, SUMMARY_CONSENT_VERSION)]);
+    oznam(el.checked ? 'Souhlas je zapnutý. Po týdenním ohlédnutí se nabídne souhrn.' : 'Souhlas je vypnutý. Nic dalšího se neposílá.');
+    prekresli();
+  },
+  async toggleParticipantCode(d, el) {
+    await savePreferences({ kod_ucastnika: el.checked ? Math.random().toString(36).slice(2, 6) : null });
+    prekresli();
+  },
+  onboardingNext() { if (onboarding.step === 1 && !onboarding.consent) return; onboarding.step = Math.min(2, onboarding.step + 1); prekresli(); },
+  onboardingBack() { onboarding.step = Math.max(0, onboarding.step - 1); prekresli(); },
+  onboardingConsent(d, el) { onboarding.consent = el.checked; prekresli(); },
+  onboardingSummary(d, el) { onboarding.summary = el.checked; },
+  onboardingDictation(d, el) { onboarding.dictation = el.checked; },
+  async onboardingAddress(d, el) { await savePreferences({ tvar_osloveni: el.value }); prekresli(); },
+  async completeOnboarding(d) {
+    if (!onboarding.consent) { onboarding.step = 1; prekresli(); return; }
+    const consents = [createConsent('pouzivani', true, 'pouzivani-1')];
+    if (onboarding.summary) consents.push(createConsent('souhrn', true, SUMMARY_CONSENT_VERSION));
+    if (onboarding.dictation) consents.push(createConsent('diktovani', true, 'diktovani-1'));
+    // Úvod je dokončený teprve po potvrzení celé dávky; reset tento stav smaže.
+    await savePreferences({ prvni_spusteni_hotovo: true, souhrn_zapnut: onboarding.summary, diktovani_zapnuto: onboarding.dictation }, consents);
+    if (location.hash === d.kam) vykresli(); else location.hash = d.kam;
+  },
+  async changeTheme(d, el) { await savePreferences({ vzhled: el.value }); applyTheme(); oznam('Uloženo.'); },
+  async remindBackupLater() { await savePreferences({ zaloha_pripomenuta: U.timestamp() }); prekresli(); },
   tydenBarva(d) { tyden.barva = tyden.barva === d.barva ? null : d.barva; prekresli(); },
   who5(d) { const i = +d.i, b = +d.body; tyden.who5[i] = tyden.who5[i] === b ? null : b; prekresli(); },
   who5Ukazat() { tyden.ukazatWho5 = true; prekresli(); },
@@ -2852,9 +3155,10 @@ const AKCE = {
       who5: skor ? { odpovedi: [...t.who5], hruby: skor.hruby, index: skor.index, nizky: skor.nizky } : null,
       verze_aplikace: U.appVersion
     });
+    const kodT = t.kod;
     tyden = null;
     oznam('Týdenní ohlédnutí je uložené.');
-    location.hash = '#/domov';
+    location.hash = nastaveni.souhrn_zapnut ? '#/souhrn/' + kodT : '#/domov';
   },
   async prosbaZacit(d) {
     const z = d.id ? await U.getEntry(d.id) : null;
@@ -3022,6 +3326,22 @@ const AKCE = {
     window.scrollTo(0, 0);
   },
   vecerZpet() { vecer.krok = 'bloky'; prekresli(); window.scrollTo(0, 0); },
+  entryToEveningBlock(d) {
+    const v = vecer, z = v.okamzite.find(x => x.id === d.id);
+    if (!z) return;
+    const r = v.rozpracovany;
+    const prazdny = r && v.upravovany === 'novy' && !r.cinnost.length && !r.popis.trim() && !r.zdroj;
+    if (v.upravovany !== null && !prazdny) { oznam('Nejdřív dokonči rozepsaný blok.'); return; }
+    const b = novyBlok();
+    b.cinnost = (z.cinnost || []).slice(0, MAX_CINNOSTI);
+    b.sKym = [...(z.s_kym || [])]; b.kde = z.kde || null;
+    b.prijemnost = z.prijemnost ?? null; b.text = z.vlastni_slova || '';
+    b.hodnotit = true; b.zdroj = z.id;
+    b.prevzate = { emoce: z.emoce, telo: z.telo, potreby: z.potreby, strategie: z.strategie, prosba: z.prosba, fotka: z.fotka };
+    v.upravovany = 'novy'; v.rozpracovany = b; v.vlastniCinnost = false;
+    prekresli();
+    setTimeout(() => { const e = app.querySelector('.editor-bloku'); if (e) e.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 50);
+  },
   blokPrijemnost(d) { const b = vecer.bloky[+d.index], x = +d.hodnota; b.prijemnost = b.prijemnost === x ? null : x; prekresli(); },
   blokSmysl(d) { const b = vecer.bloky[+d.index], x = +d.hodnota; b.smysluplnost = b.smysluplnost === x ? null : x; prekresli(); },
   blokVyzkum(d) {
@@ -3187,7 +3507,7 @@ const AKCE = {
 
   diktovat(d) {
     const Rozpoznavani = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Rozpoznavani) return;
+    if (!Rozpoznavani || !nastaveni.diktovani_zapnuto) return;
     const cil = d.cil || 'text';
     if (diktovani) {
       const predchozi = diktovaniCil;
@@ -3315,6 +3635,11 @@ const AKCE = {
     document.body.appendChild(odkaz);
     odkaz.click();
     setTimeout(() => { URL.revokeObjectURL(odkaz.href); odkaz.remove(); }, 1000);
+    // Připomenutí doplní jen svůj údaj. Export nesmí mimochodem materializovat
+    // všechny výchozí hodnoty a přepisovat obsah importovaného nastavení.
+    await U.saveSettings({ ...data.nastaveni, posledni_zaloha: U.timestamp() });
+    nastaveni = await U.getSettings();
+    if (trasa().split('/')[0] !== 'nastaveni') prekresli();
   },
   async nahrat(d, el) {
     const soubor = el.files && el.files[0];
@@ -3322,6 +3647,7 @@ const AKCE = {
     try {
       const pridano = await U.importBackup(JSON.parse(await soubor.text()));
       nastaveni = await U.getSettings();
+      applyTheme();
       oznam('Hotovo. Přibylo záznamů: ' + pridano + '.');
     } catch (chyba) {
       oznam(chyba.message || 'Zálohu se nepodařilo načíst.');
@@ -3372,10 +3698,13 @@ async function vykresli() {
   const currentRoute = trasa();
   try {
   const [t, parametr] = currentRoute.split('/');
-  const stejnaObrazovka = t === posledniTrasa;
+  const showOnboarding = !isOnboardingComplete() && t !== 'pomoc';
+  const screenKey = showOnboarding ? 'onboarding' + onboarding.step : t;
+  const stejnaObrazovka = screenKey === posledniTrasa;
   const posun = window.scrollY;
   let html;
-  switch (t) {
+  if (showOnboarding) html = renderOnboarding();
+  else switch (t) {
     case 'zaznam':     html = obrazovkaZaznam(); break;
     case 'zaznam-dal': html = obrazovkaZaznamDal(); break;
     case 'hotovo':     html = obrazovkaHotovo(); break;
@@ -3387,6 +3716,7 @@ async function vykresli() {
     case 'oslava':     html = obrazovkaOslava(); break;
     case 'prosba':     html = obrazovkaProsba(); break;
     case 'prehled':    html = await obrazovkaPrehled(); break;
+    case 'souhrn':     html = await renderWeekSummary(parametr); break;
     case 'tyden':
       if (!tyden || tyden.kod !== (parametr || tydenKOhlednuti())) await pripravTyden(parametr || tydenKOhlednuti());
       html = obrazovkaTyden(); break;
@@ -3403,11 +3733,20 @@ async function vykresli() {
     const d = app.querySelector('details[data-cast="' + cast + '"]');
     if (d) d.open = true;
   }
-  if (t === 'zaznam') vykresliPoznana();
+  if (!showOnboarding && t === 'zaznam') vykresliPoznana();
   rozvinVsechnaPole();
   // Při změně obrazovky nahoru, při překreslení stejné obrazovky zůstat na místě.
   window.scrollTo(0, stejnaObrazovka ? posun : 0);
-  posledniTrasa = t;
+  if (!stejnaObrazovka) {
+    // Název stránky a fokus na nadpis – pro čtečky obrazovky a ovládání klávesnicí.
+    const nadpis = app.querySelector('h1, .nazev-obrazovky, .znacka');
+    const nazev = nadpis ? nadpis.textContent.trim() : '';
+    document.title = nazev && !nazev.includes('Mám se!') ? nazev + ' – Mám se!' : 'Mám se!';
+    if (posledniTrasa !== null && nadpis) { nadpis.setAttribute('tabindex', '-1'); nadpis.focus({ preventScroll: true }); }
+    app.classList.add('nova');
+    setTimeout(() => app.classList.remove('nova'), 260);
+  }
+  posledniTrasa = screenKey;
   } catch (error) { reportStorageError(error); }
 }
 
@@ -3584,6 +3923,16 @@ app.addEventListener('touchend', e => {
 
 window.addEventListener('hashchange', vykresli);
 
+// Když se něco pokazí, dát vědět (místo tichého selhání).
+let lastUnexpectedError = 0;
+function reportUnexpectedError() {
+  if (Date.now() - lastUnexpectedError < 5000) return;
+  lastUnexpectedError = Date.now();
+  oznam('Něco se nepovedlo. Neuložený text si zkopíruj a zkontroluj uložený obsah po obnovení stránky.');
+}
+window.addEventListener('error', reportUnexpectedError);
+window.addEventListener('unhandledrejection', reportUnexpectedError);
+
 // Start aplikace
 (async function start() {
   try {
@@ -3594,9 +3943,22 @@ window.addEventListener('hashchange', vykresli);
     app.innerHTML = '<main class="obsah"><h1>Úložiště nejde otevřít</h1><p>' + h(e.message || 'Prohlížeč neposkytuje trvalé úložiště.') + '</p><p>Zkus běžné okno prohlížeče a obnov stránku. Data nebyla přepnuta do náhradního úložiště.</p></main>';
     return;
   }
+  applyTheme();
+  if (window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+  // Kdo už aplikaci používá (má záznamy ze starší verze), úvod neuvidí.
+  if (!isOnboardingComplete() && (await U.getEntries()).length) {
+    nastaveni.prvni_spusteni_hotovo = true;
+    await U.saveSettings(nastaveni);
+  }
   await vykresli();
+  // Požádat prohlížeč, aby data nemazal, když dochází místo.
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   // Offline provoz a instalace na plochu
   if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+    const melaVerzi = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (melaVerzi) oznam('Je tu nová verze aplikace. Načte se při příštím otevření.');
+    });
   }
 })();

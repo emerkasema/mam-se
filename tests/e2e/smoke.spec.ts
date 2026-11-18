@@ -1,11 +1,12 @@
 import { expect } from '@playwright/test';
 import { photoBase64 } from '../fixtures/mapping.ts';
 import { test } from '../integration/browser.ts';
+import { openDiary } from './navigation.ts';
 
 test('záznam přežije reload i offline otevření', async ({ page, context }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('./');
+  await openDiary(page, './');
   await expect(page.locator('[data-akce="novyZaznam"]')).toBeVisible();
   await page.locator('[data-akce="novyZaznam"]').click();
   await page.locator('#text').fill('Syntetický záznam pro test Astro.');
@@ -20,7 +21,7 @@ test('záznam přežije reload i offline otevření', async ({ page, context }) 
   await expect(page.getByAltText('Připojená fotka')).toBeVisible();
   await page.locator('[data-akce="ulozit"]').click();
   await expect(page).toHaveURL(/#\/hotovo/);
-  await page.goto('./#/domov');
+  await openDiary(page, './#/domov');
   await expect(page.getByText('Syntetický záznam pro test Astro.', { exact: true })).toBeVisible();
   await page.evaluate(async () => {
     await navigator.serviceWorker.ready;
@@ -44,7 +45,7 @@ test('záznam přežije reload i offline otevření', async ({ page, context }) 
 
 test('mobilní obálka zachovává navigaci a vzhledové assety', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('./');
+  await openDiary(page, './');
   await expect(page.locator('.znacka img')).toBeVisible();
   expect(
     await page.locator('.znacka img').evaluate((img: HTMLImageElement) => img.naturalWidth),

@@ -1,6 +1,47 @@
 import { expect } from '@playwright/test';
 import { test } from './browser.ts';
 
+test('preferences and consent history persist together and reject invalid input before writing', async ({
+  page,
+}) => {
+  await page.goto('./storage/');
+  await expect(page.locator('#status')).toHaveText('Ready');
+  const result = await page.evaluate(async () => {
+    const { storage } = window.storageTest;
+    const settings = await storage.getSettings();
+    const consent = {
+      id: 'dictation-consent',
+      co: 'diktovani',
+      zapnuto: true,
+      verze_textu: 'diktovani-1',
+      kdy: '2026-11-18T12:00:00Z',
+    };
+    await storage.saveSettings({ ...settings, diktovani_zapnuto: true }, [consent]);
+    const before = await storage.getSnapshot();
+    let rejected = false;
+    try {
+      await storage.saveSettings({ ...settings, diktovani_zapnuto: false }, [
+        { ...consent, kdy: 1n },
+      ]);
+    } catch {
+      rejected = true;
+    }
+    return { rejected, before, after: await storage.getSnapshot() };
+  });
+  expect(result.rejected).toBe(true);
+  expect(result.after).toEqual(result.before);
+  expect(result.after.souhlasy).toEqual(
+    expect.arrayContaining([expect.objectContaining({ id: 'dictation-consent', zapnuto: true })]),
+  );
+  await page.reload();
+  await expect(page.locator('#status')).toHaveText('Ready');
+  expect(
+    await page.evaluate(
+      async () => (await window.storageTest.storage.getSettings()).diktovani_zapnuto,
+    ),
+  ).toBe(true);
+});
+
 test('storage preserves backups, deletes and restores the same entry', async ({ page }) => {
   await page.goto('./storage/');
   await expect(page.locator('#status')).toHaveText('Ready');

@@ -14,7 +14,9 @@ import type { LegacySnapshot } from './legacy.ts';
 import { copyLegacySnapshot, mapLegacySnapshot, restoreLegacySnapshot } from './mapping.ts';
 import { schema } from './schema.ts';
 
-export const appVersion = '0.7.0';
+export { appVersion } from './version.ts';
+
+import { appVersion } from './version.ts';
 export const defaultSettings = {
   prvni_spusteni_hotovo: false,
   pripominka_zapnuta: false,
@@ -25,6 +27,7 @@ export const defaultSettings = {
   chronicka_bolest: false,
   tvar_osloveni: 'oba',
   souhrn_zapnut: false,
+  diktovani_zapnuto: false,
   kod_ucastnika: null,
   verze_aplikace: appVersion,
 };
@@ -237,15 +240,21 @@ export async function initializeStorage() {
             | LegacyObject
             | undefined),
         })),
-      saveSettings: (value: LegacyObject) => {
+      saveSettings: (value: LegacyObject, consents: LegacyObject[] = []) => {
+        // Souhlas a odpovídající přepínač mají jeden potvrzený zápis. Při
+        // chybě tak nevznikne zapnutá funkce bez historie jejího povolení.
         const copy = copyLegacySnapshot({
           ...emptySnapshot(),
           nastaveni: [{ key: 'hlavni', value }],
-        }).nastaveni.at(0)?.value;
+          souhlasy: consents,
+        });
         return mutate((snapshot) => {
+          for (const consent of copy.souhlasy) put(snapshot, 'souhlasy', consent);
+          const setting = copy.nastaveni[0];
+          if (!setting) throw new Error('Chybí připravené nastavení.');
           const existing = snapshot.nastaveni.find((s) => s.key === 'hlavni');
-          if (existing) existing.value = copy;
-          else snapshot.nastaveni.push({ key: 'hlavni', value: copy });
+          if (existing) existing.value = setting.value;
+          else snapshot.nastaveni.push(setting);
         });
       },
       saveEveningBatch: (entries: LegacyObject[], day: LegacyObject, deleted: string[]) => {

@@ -1,12 +1,13 @@
 import { expect } from '@playwright/test';
 import { test } from '../integration/browser.ts';
+import { openDiary } from './navigation.ts';
 
 // Stejný scénář ověřuje projektovou podcestu i kořen podle PUBLIC_APP_BASE.
 test('hosting resolves manifest, icons, SW scope and WASM under the configured base', async ({
   page,
   baseURL,
 }) => {
-  await page.goto('./');
+  await openDiary(page, './');
   await expect(page.locator('[data-akce="novyZaznam"]')).toBeVisible();
   const expectedBase = new URL(baseURL!);
   const manifestURL = await page

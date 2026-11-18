@@ -1,10 +1,12 @@
 import { readFile } from 'node:fs/promises';
 import { expect, type Page } from '@playwright/test';
+import type { LegacyBackup, LegacyObject } from '../../src/data/backup.ts';
 import { mappingFixture, photoBase64 } from '../fixtures/mapping.ts';
 import { test } from '../integration/browser.ts';
+import { openDiary } from './navigation.ts';
 
 async function openSettings(page: Page) {
-  await page.goto('./#/nastaveni');
+  await openDiary(page, './#/nastaveni');
   await expect(page.getByRole('heading', { name: 'Záloha', exact: true })).toBeVisible();
 }
 async function uploadBackup(page: Page, data: unknown) {
@@ -20,6 +22,22 @@ async function downloadBackup(page: Page) {
   const file = await (await download).path();
   if (!file) throw new Error('Missing backup download');
   return JSON.parse(await readFile(file, 'utf8'));
+}
+// Připomenutí posledního exportu je místní provozní údaj. Obnova má navíc
+// zachovat nový souhlas vytvořený po resetu, nikoli ho tiše mazat.
+function stableBackup(
+  data: LegacyBackup & { settingsEntries: { key: string; value: LegacyObject }[] },
+  expectedConsents = data.souhlasy,
+) {
+  const copy = structuredClone(data);
+  delete copy.exportovano;
+  delete copy.nastaveni.posledni_zaloha;
+  for (const setting of copy.settingsEntries)
+    if (setting.key === 'hlavni') delete setting.value.posledni_zaloha;
+  copy.souhlasy = copy.souhlasy.filter((row) =>
+    expectedConsents.some((expected) => expected.id === row.id),
+  );
+  return copy;
 }
 function backupFixture() {
   const snapshot = mappingFixture();
@@ -49,26 +67,30 @@ test('new user can back up, reset, restore all stores and use a photo offline', 
       .fotka,
   ).toBe(`data:image/png;base64,${photoBase64}`);
   expect(before.tydny).toHaveLength(2);
-  expect(before.souhlasy).toHaveLength(1);
+  expect(before.souhlasy).toEqual(
+    expect.arrayContaining([expect.objectContaining({ id: 'synthetic-consent' })]),
+  );
   expect(before.doporuceni).toHaveLength(1);
   expect(before.settingsEntries).toHaveLength(3);
   await page.locator('[data-akce="smazat"]').click();
   await page.locator('[data-akce="smazatAno"]').click();
-  await expect(page.locator('[data-akce="novyZaznam"]')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Vítej v Mám se!' })).toBeVisible();
   await openSettings(page);
   const empty = await downloadBackup(page);
-  for (const name of ['zaznamy', 'dny', 'tydny', 'souhlasy', 'doporuceni', 'settingsEntries'])
-    expect(empty[name]).toEqual([]);
+  for (const name of ['zaznamy', 'dny', 'tydny', 'doporuceni']) expect(empty[name]).toEqual([]);
+  // Po resetu vznikl pouze nový souhlas s používáním, původní deník je prázdný.
+  expect(empty.souhlasy).toHaveLength(1);
+  expect(empty.souhlasy[0].co).toBe('pouzivani');
   await uploadBackup(page, before);
   await expect(page.getByText('Hotovo. Přibylo záznamů: 3.', { exact: true })).toBeVisible();
   const after = await downloadBackup(page);
-  expect({ ...after, exportovano: '' }).toEqual({ ...before, exportovano: '' });
+  expect(stableBackup(after, before.souhlasy)).toEqual(stableBackup(before, before.souhlasy));
   await page.evaluate(async () => {
     await navigator.serviceWorker.ready;
   });
   await page.reload();
   await context.setOffline(true);
-  await page.goto('./#/detail/11111111-1111-4111-8111-111111111111');
+  await openDiary(page, './#/detail/11111111-1111-4111-8111-111111111111');
   await expect(page.locator('.fotka-velka')).toBeVisible();
   expect(
     await page.locator('.fotka-velka').evaluate((img: HTMLImageElement) => img.naturalWidth),
@@ -95,7 +117,7 @@ test('invalid import leaves the actual diary unchanged', async ({ page }) => {
   await uploadBackup(page, invalid);
   await expect(page.getByText(/Fotku nelze dekódovat/)).toBeVisible();
   const after = await downloadBackup(page);
-  expect({ ...after, exportovano: '' }).toEqual({ ...before, exportovano: '' });
+  expect(stableBackup(after)).toEqual(stableBackup(before));
 });
 
 test('editing an evening entry preserves its description and additional fields', async ({
@@ -106,7 +128,7 @@ test('editing an evening entry preserves its description and additional fields',
   backup.zaznamy[1]!.extra = { preserved: true };
   await uploadBackup(page, backup);
   await expect(page.getByText('Hotovo. Přibylo záznamů: 3.', { exact: true })).toBeVisible();
-  await page.goto('./#/detail/id-evening');
+  await openDiary(page, './#/detail/id-evening');
   await page.locator('[data-akce="upravitZaznam"]').click();
   await page.locator('#text').fill('Doplněný večerní záznam.');
   await page.locator('[data-akce="ulozit"]').click();
@@ -121,7 +143,7 @@ test('editing an evening entry preserves its description and additional fields',
 });
 
 test('new user can save an evening schedule, a celebration and a week', async ({ page }) => {
-  await page.goto('./#/vecer/2026-11-10');
+  await openDiary(page, './#/vecer/2026-11-10');
   await page.locator('#blok-popis').fill('Syntetický večerní blok');
   await page.locator('[data-akce="blokCinnost"]').first().click();
   await page.locator('[data-akce="vecerUlozitRozvrh"]').click();
@@ -130,7 +152,7 @@ test('new user can save an evening schedule, a celebration and a week', async ({
   ).toBeVisible();
   await page.locator('[data-akce="vecerDal"]').click();
   await page.locator('[data-akce="vecerUlozit"]').click();
-  await page.goto('./#/tyden/2026-W46');
+  await openDiary(page, './#/tyden/2026-W46');
   await page.locator('#tyden-tema').fill('Syntetické téma týdne');
   await page.locator('[data-akce="tydenUlozit"]').click();
   await expect(page).toHaveURL(/#\/domov/);

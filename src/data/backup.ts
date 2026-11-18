@@ -1,5 +1,6 @@
 import type { LegacySnapshot } from './legacy.ts';
 import { mapLegacySnapshot } from './mapping.ts';
+import { appVersion } from './version.ts';
 // České klíče jsou přenosový kontrakt záloh 0.7.0, nikoliv nové schéma Evolu.
 export type LegacyObject = Record<string, unknown>;
 export const legacyCollections = ['zaznamy', 'dny', 'tydny', 'souhlasy', 'doporuceni'] as const;
@@ -224,7 +225,7 @@ export async function exportSnapshot(snapshot: LegacySnapshot) {
     aplikace: 'Mám se!' as const,
     format_zalohy: 1 as const,
     exportovano: new Date().toISOString(),
-    verze_aplikace: '0.7.0',
+    verze_aplikace: appVersion,
     ...Object.fromEntries(legacyCollections.map((name) => [name, data[name]])),
     nastaveni: (data.nastaveni.find((item) => item.key === 'hlavni')?.value ?? {}) as LegacyObject,
     settingsEntries: data.nastaveni,

@@ -1,6 +1,7 @@
 import { expect } from '@playwright/test';
 import { legacyFixture } from '../fixtures/legacy.ts';
 import { test } from '../integration/browser.ts';
+import { openDiary } from './navigation.ts';
 
 // Fixní okamžik nestačí: UI používá místní datum i čas.
 test.use({ timezoneId: 'Europe/Prague' });
@@ -9,7 +10,7 @@ for (const width of [390, 1280]) {
   test(`upstream visual baseline ${width}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     await page.clock.setFixedTime(new Date('2026-11-10T12:00:00+01:00'));
-    await page.goto('./#/nastaveni');
+    await openDiary(page, './#/nastaveni');
     await expect(page.getByRole('heading', { name: 'Záloha', exact: true })).toBeVisible();
     await page.locator('input[type="file"]').setInputFiles({
       name: 'synthetic-backup.json',
@@ -30,7 +31,7 @@ for (const width of [390, 1280]) {
       ['settings', 'nastaveni'],
     ];
     for (const [name, route] of routes) {
-      await page.goto(`./#/${route}`);
+      await openDiary(page, `./#/${route}`);
       await expect(page.locator('main')).toBeVisible();
       if (name === 'home')
         await expect(page.getByRole('heading', { name: 'Jak se máš?', exact: true })).toBeVisible();
@@ -46,7 +47,9 @@ for (const width of [390, 1280]) {
         await expect(page.getByRole('heading', { name: 'Můj přehled', exact: true })).toBeVisible();
       if (name === 'settings')
         await expect(page.getByRole('heading', { name: 'Záloha', exact: true })).toBeVisible();
-      await expect(page).toHaveScreenshot(`${name}-${width}.png`, {
+      // Při legitimní změně upstreamu chceme vidět všechny obrazovky, ne jen
+      // první rozdíl. Selhání kteréhokoli snímku pořád znamená neúspěšný test.
+      await expect.soft(page).toHaveScreenshot(`${name}-${width}.png`, {
         fullPage: true,
         animations: 'disabled',
         maxDiffPixels: 50,
