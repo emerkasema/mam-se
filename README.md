@@ -2,11 +2,13 @@
 
 Osobní deník pohody. Statická webová aplikace (PWA) s českým rozhraním, která ukládá deník místně přes **Evolu / SQLite v prohlížeči**. Není potřeba účet ani serverové přihlášení. **Synchronizace je vypnutá (`transports: []`); přenos mezi zařízeními zajišťuje JSON záloha.**
 
-**Verze 0.7.0 – první prototyp:** Domov, okamžitý záznam s fotkou, večerní ohlédnutí s rozvrhem dne, shrnutí a snímek dne ke sdílení, oslava dne s animacemi a sdílením, prosba blízkému člověku, týdenní ohlédnutí s WHO-5, Můj přehled (kalendář, průběh týdnů, souvislosti), barva dne, detail a doplňování záznamů, pomoc, připomínka do kalendáře, nastavení se zálohou.
+**Chceš aplikaci poprvé otevřít? Začni [krátkým návodem na vyzkoušení](docs/TRY_IT.md).** Obsahuje přesné příkazy, místní adresu i prompt pro Claude Code. Samotný GitHub repozitář není běžící web; veřejná testovací URL zatím není potvrzená.
+
+**Verze 0.10.0 – lokální prototyp:** Zachovává obrazovky původního deníku včetně „Můj přehled“ a přebírá změny autorky z `0.10.0`: úvod, volitelné souhlasy s diktováním a souhrny, světlý/tmavý vzhled, připomenutí zálohy, převzetí okamžité chvíle do večerního rozvrhu a oslavy týdne. Data těchto funkcí používají stejné místní Evolu úložiště.
 
 ## Jak aplikaci používat
 
-1. Otevři aplikaci v běžném okně prohlížeče. Novému uživateli automaticky vznikne prázdný místní deník a místní identita. Počkej na zobrazení Domova; pokud se úložiště nepodaří otevřít, aplikace zobrazí chybu a nepřejde na paměťové náhradní ukládání.
+1. Otevři aplikaci v běžném okně prohlížeče. Novému uživateli automaticky vznikne prázdný místní deník a místní identita. Projdi tříkrokový úvod; diktování a souhrny jsou volitelné a výchozí stav je vypnutý. Pokud se úložiště nepodaří otevřít, aplikace zobrazí chybu a nepřejde na paměťové náhradní ukládání.
 2. Přes „Zaznamenat“ napiš chvíli, případně přilož fotku a doplň emoce či potřeby. Ulož ji tlačítkem „Takhle to stačí“ / „Uložit“. Večerní ohlédnutí má i samostatné uložení rozvrhu. Rozepsaný, neuložený obsah zůstává pouze v paměti stránky.
 3. Z Domova, detailu a „Můj přehled“ lze uložené záznamy prohlížet a doplňovat. Fungují také oslavy, barva dne, týdenní ohlédnutí, WHO-5, doporučení a kontakty v Nastavení. Jednotlivé smazání vyžaduje potvrzení.
 4. V **Nastavení → Záloha → Stáhnout zálohu** pravidelně stáhni JSON soubor a ulož ho mimo tento prohlížeč. Na jiném zařízení použij **Nahrát zálohu**. Samotná instalace PWA ani místní identita nejsou záloha.
@@ -32,6 +34,8 @@ Aplikace vyžaduje zabezpečený kontext: HTTPS, při vývoji `localhost` / loop
 Doména, protokol a port tvoří origin. `localhost` a `127.0.0.1`, jiné porty nebo jiná doména tedy uvidí jiný deník. Pro běžné používání si drž jednu stabilní adresu. Při změně adresy nebo telefonu přenes data JSON zálohou.
 
 Fotky zvolené přes UI se před prvním uložením zmenšují původním obrazovým zpracováním aplikace. Diktování závisí na prohlížeči a jeho službě rozpoznávání řeči; může používat externí službu a není garantováno offline. Ruční sdílení, kontakty a kalendář otevírají zvolenou aplikaci. Písma Inter i Fraunces jsou přibalená místně.
+
+**Volitelné společné souhrny nejsou Evolu synchronizace.** Po zapnutí a uložení týdne se zobrazí náhled souhrnných hodnot. Teprve tlačítko otevře předvyplněný Google formulář převzatý z upstreamu; jeho finální odeslání provádí uživatel. Už otevření odkazu předává hodnoty v URL Googlu. Osobní texty, fotky, místa a kontakty se do odkazu nepřidávají. Souhrn může obsahovat WHO-5 a volitelný kód účastníka; ani souhrn bez jména v malé skupině nezaručuje anonymitu. Cíl formuláře, přístup ke společné tabulce a text souhlasu musí autorka před zveřejněním potvrdit.
 
 ## Spuštění pro vývoj
 
@@ -72,7 +76,7 @@ bun run test:e2e
 
 - `check` spustí Biome a TypeScript. Nepokrývá typy původního JS ani Astro šablon; ty ověřují build a browser testy.
 - `test` je `node:test` nad datovými moduly a výstupem buildu. Proto build spouštěj před ním. Používej `bun run test`, nikoli `bun test`, který by sbíral i Playwright soubory.
-- `test:e2e` spustí vlastní preview produkčního buildu na portu 4321. Chromium, Firefox a WebKit ověřují nový deník, skutečné UI, fotku, reload, offline zápis/mazání, zálohu/obnovu a reset. Vizuální baseline se porovnává jen v Chromium; obsahuje 14 macOS snímků a její soubory nebyly kvůli přepnutí přepsány.
+- `test:e2e` spustí vlastní preview produkčního buildu na portu 4321. Chromium, Firefox a WebKit ověřují nový deník, úvod a souhlasy, vzhled, náhled souhrnu bez odeslání, převzetí okamžité chvíle do večera, fotku, reload, offline zápis/mazání, zálohu/obnovu a reset. Vizuální baseline se porovnává jen v Chromium; obsahuje 14 macOS snímků aktualizovaných po kontrole změn upstreamu `0.10.0`.
 
 Podrobnější integrační kontroly:
 
@@ -110,6 +114,7 @@ Automatické testy desktopových browser enginů nenahrazují ověření fyzick�
 | --- | --- |
 | `src/pages/index.astro`, `src/app/app.js` | Statická obálka a původní vanilla JS obrazovky. UI používá nové EN datové API. |
 | `src/data/storage.ts` | Produkční lokální CRUD, společný zámek nových karet, zálohy a přerušitelný reset. |
+| `src/data/version.ts` | Společná verze pro UI a nově vytvářené zálohy; nemění verze historických záznamů. |
 | `src/data/client.ts`, `identity.ts`, `batch.ts` | Inicializace Evolu, místní identita a potvrzené dávky včetně soft-delete a obnovení stejného ID. |
 | `src/data/schema.ts`, `mapping.ts`, `photos.ts` | EN schéma, zachování CZ datových klíčů a neznámých JSON polí, validace a bajty fotek. |
 | `src/data/backup.ts` | Formát zálohy, úplná příprava importu a export snapshotu. |

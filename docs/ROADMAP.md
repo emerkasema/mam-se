@@ -2,6 +2,8 @@
 
 Návrhy pro autorku, bez závazných termínů. Každý úkol zadávej zvlášť až po rozhodnutí o jeho rozsahu. Agent nejdřív čte AGENTS.md a README, zachová EN naming a české vysvětlení; pracuje se syntetickými daty, bez samovolného publikování.
 
+**Než začneš další úkol, otevři aplikaci podle [TRY_IT.md](TRY_IT.md).** Referenční větev už propojuje obrazovky upstreamu `0.10.0` s místním Evolu úložištěm. Ověř nejdřív vlastní zkušenost s úvodem, jedním záznamem a zálohou; teprve potom rozhoduj o zveřejnění.
+
 | Pořadí a cíl | Krátký prompt pro agenta | Kontrola výsledku |
 | --- | --- | --- |
 | 1. Dokončit vlastnická rozhodnutí a první publikaci | „Projdi MAINTAINER.md, vypiš chybějící rozhodnutí a připrav konkrétní návrh k mé kontrole. Licence, kontakty, URL ani GitHub nastavení za mě neurčuj.“ | Doplněné pravdivé údaje, úspěšný GitHub CI a samostatně schválený Pages běh; ruční telefonní scénář z README. |

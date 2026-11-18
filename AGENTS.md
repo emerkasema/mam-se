@@ -20,7 +20,7 @@
 
 ## Produktové hranice
 
-- Zachovej design, české texty a funkce upstreamu 0.7.0 včetně „Můj přehled“. Opravuj technické chyby; nepřidávej svévolně produktové funkce.
+- Zachovej design, české texty a funkce upstreamu 0.10.0 včetně „Můj přehled“, úvodu, vzhledu, souhlasů a souhrnů. Opravuj technické chyby; nepřidávej svévolně produktové funkce.
 - Astro tvoří statickou obálku, klient je vanilla JS. Nové datové moduly mohou být TypeScript. Nepřidávej React, UI framework ani serverové přihlášení.
 - Cílové úložiště je Evolu se synchronizací vypnutou do výslovného zapnutí. Nikdy neodesílej skutečný deník na testovací relay.
 - Migrace musí zachovat původní IndexedDB, ID, fotky, nastavení a zálohy; žádné tiché zkrácení či vynechání dat. E2EE nechrání odemčené zařízení ani JSON export.
@@ -34,13 +34,16 @@
 4. Browser testy: jednorázově `bunx --no-install playwright install chromium`, potom `bun run test:e2e`. Testuje se build; stejnou `PUBLIC_APP_BASE` použij při buildu i testu. Playwright používá `--ignore-lock`, aby Astro pod agentem nespustilo nezávislý daemon.
 5. Před commitem zkontroluj diff a `git diff --check`. Testuj jen syntetická data. Neupravuj globální bezpečnostní nastavení; nálezy auditu neřeš automatickým hromadným upgradem závislostí.
 
-## Aktuální lokální prototyp (10. 11. 2026)
+## Aktuální lokální prototyp (18. 11. 2026)
 
 - Produkční `src/app/app.js` používá EN API `src/data/storage.ts` nad Evolu/SQLite. Synchronizace je vypnutá (`transports: []`), recovery není implementované. Nepřidávej relay ani serverové přihlášení.
+- Změny upstreamu `0.10.0` jsou přenesené do klienta Astro. Převzetí celého původního `js/app.js` by vrátilo staré úložiště a odstranilo potvrzování zápisů. Při dalším merge porovnej funkce explicitně; společná historie sama neprokazuje úplný přenos. Postup je v docs/MAINTAINER.md.
+- Nastavení a nové záznamy souhlasů ukládej společně přes `saveSettings(value, consents)`. Dokončení úvodu je v Evolu nastavení, nikoli v samostatném localStorage markeru, který by přežil reset. Volitelné souhrny a diktování zůstávají výchozím stavem vypnuté.
+- Souhrn do Google formuláře je převzatá uživatelská funkce, ne zapnutí Evolu sync. Neposílá se automaticky; otevření předvyplněného odkazu už předává hodnoty Googlu. Testy jen ověřují náhled/odkaz, neodesílají formulář ani nespouštějí skutečné diktování.
 - Nový uživatel začíná s prázdným deníkem. Původní `src/app/uloziste.js` ani `src/data/legacy.ts` se do produkce neimportují. Read-only snapshot, mapování a legacy testy jsou ponechané jako příprava pro Emerku; **automatická migrace není dokončená ani zapojená**. Původní IndexedDB se při startu ani resetu této verze nečte a nemaže.
 - Adaptér podporuje lokální CRUD, potvrzené mazání i obnovení stejného ID, společnou dávku večera, JSON export/import a místní reset včetně identity. Změny nových karet koordinuje Web Lock, stav resetu přežívá vymazání Evolu DB. Nepoužívej přímé nízkoúrovňové mutace z UI místo writeru.
 - Import ověřuje celý soubor, dekódování fotek a limity před zápisem. Zachovej legacy klíče, všech šest stores, další klíče nastavení, neznámá kompatibilní JSON pole a přesné uložené bajty/MIME fotek. `settingsEntries` rozšiřuje formát 1 o explicitní klíče nastavení. Nepodporovaný obsah odmítej, nezahazuj.
 - `scripts/build-sw.mjs` generuje manifest skutečných assetů včetně workerů/WASM a místních fontů Inter/Fraunces. Workbox není podmínkou prototypu. Rozepsaný obsah je jen v paměti; nevyvolávej automatický reload během psaní.
 - `check` pokrývá Biome pro vybraný rozsah a TS kontrolu. Původní JS ani typy Astro šablon nepokrývá; ověřuj je buildem a browser testy. `@astrojs/check` 0.9.12 podporuje TS 5/6, projekt má TS 7; nepoužívej `--force` / `--legacy-peer-deps`.
-- `bun run test:e2e` testuje produkční build v Chromium/Firefox/WebKit; 14 vizuálních baseline snímků pouze macOS/Chromium. Integrační root není součást produkce. Fyzický telefon a velké archivy vyžadují samostatné ověření, testy desktopových enginů je nenahrazují. Podrobnosti jsou v README.
+- `bun run test:e2e` testuje produkční build v Chromium/Firefox/WebKit; 14 vizuálních baseline snímků upstreamu 0.10.0 pouze macOS/Chromium. Integrační root není součást produkce. Fyzický telefon a velké archivy vyžadují samostatné ověření, testy desktopových enginů je nenahrazují. Podrobnosti jsou v README a první spuštění v docs/TRY_IT.md.
 - Volitelný upstream úkol a široké recovery/sync zadání zůstávají odložené. Žádný push/merge/PR/deploy či změna remotes bez dalšího výslovného pokynu.

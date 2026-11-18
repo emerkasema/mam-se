@@ -2,6 +2,28 @@
 
 Lokální prototyp a jeho hranice popisuje [README](../README.md). Tento návod připravuje GitHub Actions a Pages; vzdálené nastavení ani nasazení tím není provedeno.
 
+**Pro první otevření aplikace použij [krátký návod na vyzkoušení](TRY_IT.md).** Následující nastavení GitHubu není podmínkou místního spuštění.
+
+## Předání samostatné větve bez PR
+
+Autorka může dostat technický základ přímo do `miccy-main` ve svém repozitáři. Tím se nemění její `main` ani se automaticky nenasazuje web. Přispěvatel k přímému push potřebuje oprávnění zápisu; konkrétní merge/push vždy provádí až po výslovném zadání.
+
+1. Ověř čistý pracovní strom, cílovou větev a skutečné URL přes `git status --short --branch` a `git remote -v`. Název `origin` sám nic neříká o hostingu ani vlastníkovi.
+2. Na pracovní větvi spusť kontroly z README. Zahrň i browser testy; build sám neověří funkce ani chybějící odkazy na fonty.
+3. Lokálně přepni na referenční větev a použij `git merge --ff-only NAZEV_OVERENE_PRACOVNI_VETVE`. Velká písmena zde znamenají zástupný text, nikoli doslovný název. Pokud fast-forward nejde, zastav a prohlédni nové commity; nepoužívej reset ani force push.
+4. Po `git fetch NAZEV_REMOTE` zkontroluj `git log --oneline --left-right miccy-main...NAZEV_REMOTE/miccy-main` a pak `git push --dry-run NAZEV_REMOTE miccy-main:refs/heads/miccy-main`. Teprve potom proveď stejný push bez `--dry-run`. Pro každý schválený remote opakuj kontrolu zvlášť. Pokud vzdálená větev ještě neexistuje, porovnej její výchozí základ a dry-run musí oznámit vytvoření nové větve.
+5. Na GitHubu otevři právě předanou větev a ověř SHA a doběhnutí CI. Přímé předání nepotřebuje nový PR. Výchozí větev ani Pages nepřepínej jako vedlejší efekt předání.
+
+Ochrana větve a způsob spolupráce jsou dvě rozhodnutí. Pro přímo předávanou referenční větev lze ponechat zákaz force push a smazání, aniž by vyžadovala PR. Pravidla neměň automaticky kvůli odmítnutému push. Produkční `main` může mít přísnější režim. [GitHub: ochrana větví](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches).
+
+## Další změny z původní aplikace
+
+Původní aplikace má klienta v `js/app.js`, Astro větev v `src/app/app.js`. Git může považovat upstream commit za sloučený, i když při řešení konfliktu zůstala naše varianta souboru. Samotný merge commit tedy není kontrola úplnosti funkcí.
+
+Při další integraci porovnej změny původního `js/app.js` s `src/app/app.js` po jednotlivých funkcích. Zachovej nové EN datové API, potvrzování zápisů a mazání, ochranu před opožděným vykreslením a produkční registraci service workeru. Nepřepisuj klienta celý upstream souborem: vrátil by se k původnímu úložišti. Nové souhlasy ukládej spolu s odpovídajícím nastavením přes `saveSettings(value, consents)`.
+
+Baseline snímky odpovídají po vizuální kontrole upstreamu `0.10.0`. Při dalších změnách nejdřív prohlédni skutečné rozdíly; hromadné `--update-snapshots` není oprava testu. Dvě nové fontové deklarace upstreamu se nepřebírají, protože Astro větev již dodává místní Fraunces přes `public/fonty/Fraunces.css`.
+
 ## Rozhodnutí před mergem
 
 | Co doplnit | Proč |
@@ -10,11 +32,12 @@ Lokální prototyp a jeho hranice popisuje [README](../README.md). Tento návod 
 | **DOPLNIT PŘED MERGEM — bezpečnostní/komunitní kontakt, odpovědná osoba a podporované verze** | Vyplnit SECURITY.md a CODE_OF_CONDUCT.md; neslibovat podporu bez kapacity. |
 | **DOPLNIT PŘED MERGEM — GitHub owner/repo a publikační větev** | Potvrdit cílový repozitář a chráněnou větev, ze které se smí nasazovat. |
 | **DOPLNIT PŘED MERGEM — konečná HTTPS URL/doména a hosting** | Potvrdit existující origin a případný přenos zálohou. Pages je připravená možnost. Produkční relay zůstává odložený. |
+| **DOPLNIT PŘED MERGEM — společný Google formulář a souhlasy** | `SUMMARY_FORM` v klientovi pochází z upstreamu. Potvrdit vlastníka, pole, přístup k tabulce a texty souhlasů. Otevření předvyplněného odkazu předává souhrnné hodnoty Googlu; nejde o Evolu synchronizaci ani zaručeně anonymní data. |
 
 ## Kontroly a oprávnění GitHubu
 
 1. Po schváleném předání kódu do GitHubu nech doběhnout `CI`. Povinné kontroly nastav podle skutečně vzniklých checks **CI / Linux functional and integration** a **CI / macOS visual baseline** (UI může přidat prefix volajícího workflow). Vyber odpovídající joby z reálného PR. CI běží pro všechny PR a push do `main`, `miccy-main`, `miccy-dev` a `codex-*`; pro jinou integrační větev uprav push filtr. PR nemají path filtr, který by nechal povinnou kontrolu čekat.
-2. Na hlavní/publikační větvi vyžaduj PR, úspěšné checks a vyřešené review komentáře; zakaž force push a smazání. Schválení druhým člověkem vyžaduj jen s dostupným reviewerem, aby se samotná autorka nezablokovala. Produkční deploy nepatří mezi podmínky merge.
+2. Na hlavní/publikační větvi doporučujeme PR, úspěšné checks a vyřešené review komentáře; zakaž force push a smazání. Pro přímé předání samostatné referenční větve platí postup výše. Schválení druhým člověkem vyžaduj jen s dostupným reviewerem, aby se samotná autorka nezablokovala. Produkční deploy nepatří mezi podmínky merge.
 3. Výchozí `GITHUB_TOKEN` nastav jen pro čtení obsahu a schvaluj běhy externích přispěvatelů. Workflow nepoužívají `pull_request_target`, PAT ani produkční tajemství. Pages/OIDC zápis má pouze deploy job; metadata Pages mají `pages: read`.
 4. Zapni dostupné dependency/security alerts a soukromé hlášení zranitelností; dostupnost ochrany větví, Pages a bezpečnostních funkcí závisí na tarifu a viditelnosti repozitáře. Plošný auto-merge není potřeba.
 
