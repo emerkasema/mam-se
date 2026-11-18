@@ -65,6 +65,14 @@ GitLab uchovává `dist/` a syntetickou diagnostiku jako jednodenní artefakty. 
 
 Přípravu lze před push ověřit pomocí `actionlint` a GitLab **CI Lint** v režimu dry-run. Validní YAML není doklad vykonaných browser testů ani oprávnění k deploy. Podklady: [Playwright v Dockeru](https://playwright.dev/docs/docker), [Playwright v CI](https://playwright.dev/docs/ci), [GitLab CI konfigurace](https://docs.gitlab.com/ci/yaml/).
 
+## Aktualizace knihoven
+
+Použij `bun update --latest --exact` pro společnou aktualizaci závislostí a `bun.lock`; přesné verze zůstávají v `package.json`. Všechny používané `@evolu/*` balíčky aktualizuj společně. Po změně Playwright aktualizuj také verzi a ověřený digest image v obou CI souborech. Pak ověř `bun install --frozen-lockfile` a celý postup kontrol z README. Rozdíl vizuálních snímků nejdřív prohlédni, nepřepisuj je jen kvůli zelenému CI.
+
+Evolu `8.28` přejmenovalo `onComplete` na `onSuccess` a přidalo `onError`. Adaptér obsluhuje obě výsledné větve; úspěch dál potvrzuje zpětným čtením všech hodnot. Evolu `8.29` umí migraci databáze Evolu 7; to není migrace vlastní historické IndexedDB `mamse`. Kvůli ní nepřepínej identitu, název aplikace ani nenahrazuj její původní úložiště. Při upgradu ověř i otevření syntetického deníku vytvořeného předchozí verzí, nejen nový prázdný profil. [Evolu 8.28](https://github.com/evoluhq/evolu/releases/tag/%40evolu%2Fcommon%408.28.0), [Evolu 8.29](https://github.com/evoluhq/evolu/releases/tag/%40evolu%2Fcommon%408.29.0).
+
+Před přechodem na jinou sestavu dokonči nebo zkopíruj rozepsaný obsah a zavři staré karty. `createEvoluDeps()` může při čekajícím buildu po ztrátě fokusu či návratu z bfcache automaticky obnovit stránku; koncepty jsou zatím jen v paměti. Toto chování bylo ověřeno ve zdroji `@evolu/web` 3.7.1 i 3.9.0, není nové v tomto upgradu. Jeho bezpečné řešení zahrnuje uchování konceptu i obnovení ukončeného klienta, viz [samostatný úkol](ROADMAP.md).
+
 ## První Pages nasazení — po rozhodnutí autorky
 
 Pokud dostaneš tento základ jen v referenční větvi, nemusíš jej slučovat do

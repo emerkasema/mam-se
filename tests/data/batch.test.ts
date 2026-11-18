@@ -12,14 +12,19 @@ const write = {
     payload: Json.orThrow('{}'),
   },
 };
-function fixture(options: { complete?: boolean; rows?: unknown[] } = {}) {
+function fixture(options: { complete?: boolean; mutationError?: boolean; rows?: unknown[] } = {}) {
   const errors = createStore<EvoluError | null>(null);
   let sends = 0;
   const evolu = {
     getMutationSize: () => PositiveInt.orThrow(100),
-    upsert: (_table: unknown, _values: unknown, callbacks: { onComplete: () => void }) => {
+    upsert: (
+      _table: unknown,
+      _values: unknown,
+      callbacks: { onSuccess: () => void; onError: () => void },
+    ) => {
       sends++;
-      if (options.complete !== false) queueMicrotask(callbacks.onComplete);
+      if (options.mutationError) queueMicrotask(callbacks.onError);
+      else if (options.complete !== false) queueMicrotask(callbacks.onSuccess);
     },
     loadQuery: async () => options.rows ?? [{ ...write.values, isDeleted: 0 }],
   } as unknown as Evolu<DiarySchema>;
@@ -45,6 +50,19 @@ test('Evolu error releases pending and queued writes without waiting for callbac
     await Promise.resolve();
     errors.set({ type: 'OtherBuildRunningError' });
     await Promise.all([first, second]);
+    assert.equal(sends(), 1);
+  } finally {
+    writer.close();
+  }
+});
+
+test('mutation rejection invalidates pending and queued writes without a global error event', async () => {
+  const { writer, errors, sends } = fixture({ mutationError: true });
+  try {
+    const first = assert.rejects(writer.writeBatch([write]), /odmítlo/);
+    const second = assert.rejects(writer.writeBatch([write]), /odmítlo/);
+    await Promise.all([first, second]);
+    assert.equal(errors.get(), null);
     assert.equal(sends(), 1);
   } finally {
     writer.close();

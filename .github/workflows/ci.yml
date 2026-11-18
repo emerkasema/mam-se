@@ -30,7 +30,7 @@ jobs:
     # Verze musí odpovídat @playwright/test v package.json; digest brání
     # tiché změně image. Stejný image používá GitLab CI.
     container:
-      image: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:7d65a4f42874c51eb04593bb37c4a492af87092ff7a74d2b79ba3c84e1c15aa2
+      image: mcr.microsoft.com/playwright:v1.65.1-noble@sha256:35406ab6ced53143cd1355c2cd409b13a3e348a959393d7d08977b12e28d945d
       options: --ipc=host
     defaults:
       run:

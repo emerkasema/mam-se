@@ -43,7 +43,7 @@ document.querySelector('#save')!.addEventListener('click', () => {
     'entry',
     { text: NonEmptyTrimmedString100.orThrow('Synthetic entry') },
     {
-      onComplete: () => {
+      onSuccess: () => {
         void render();
       },
     },

@@ -76,7 +76,8 @@ export function createBatchWriter(
     return {
       table,
       values: snapshot,
-      send: (onComplete: () => void) => evolu.upsert(table, snapshot, { onComplete }),
+      send: (onSuccess: () => void, onError: () => void) =>
+        evolu.upsert(table, snapshot, { onSuccess, onError }),
     };
   }
 
@@ -131,7 +132,12 @@ export function createBatchWriter(
         try {
           // Bez await: jedna Evolu microtask dávka. Callbacky samotné nestačí,
           // např. karanténa časových razítek nemusí změnu promítnout do tabulky.
-          for (const operation of operations) operation.send(complete);
+          for (const operation of operations)
+            operation.send(complete, () => {
+              // Evolu 8.28+ může odmítnout jednotlivou mutaci přes onError.
+              // I bez globální události uvolníme čekání a writer zneplatníme.
+              invalidate('Úložiště odmítlo dávku. Výsledek zápisu není ověřený.');
+            });
         } catch {
           invalidate('Odeslání dávky selhalo. Výsledek zápisu není ověřený.');
         }

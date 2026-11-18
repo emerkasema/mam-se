@@ -23,14 +23,14 @@
     "format": "biome format --write ."
   },
   "dependencies": {
-    "@evolu/common": "8.27.2",
-    "@evolu/web": "3.7.1",
-    "astro": "7.4.8"
+    "@evolu/common": "8.29.0",
+    "@evolu/web": "3.9.0",
+    "astro": "7.4.13"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.6.6",
-    "@evolu/relay": "4.3.3",
-    "@playwright/test": "1.65.0",
+    "@biomejs/biome": "2.6.8",
+    "@evolu/relay": "4.3.5",
+    "@playwright/test": "1.65.1",
     "@types/node": "26.6.6",
     "typescript": "7.0.2",
     "workbox-build": "7.4.1"

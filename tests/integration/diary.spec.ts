@@ -170,7 +170,7 @@ test('raw Evolu calls can commit an earlier row when a later call throws synchro
     const stored = new Promise<void>((resolve) => {
       completed = resolve;
     });
-    client.evolu.upsert('day', day('partial').values, { onComplete: completed });
+    client.evolu.upsert('day', day('partial').values, { onSuccess: completed });
     let threw = false;
     try {
       client.evolu.upsert('day', day('too-large', JSON.stringify('x'.repeat(640_000))).values);
