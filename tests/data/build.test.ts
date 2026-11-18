@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFile, stat } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 import { test } from 'node:test';
 
 test('offline manifest obsahuje existující obálku, skripty, styly a fonty', async () => {
@@ -20,5 +21,20 @@ test('offline manifest obsahuje existující obálku, skripty, styly a fonty', a
   for (const path of assets) {
     assert.ok(!path.startsWith('/') && !path.includes('..'));
     assert.ok((await stat(`dist/${path}`)).isFile(), path);
+  }
+});
+
+test('lokální odkazy ve stylech směřují na soubory zahrnuté do offline buildu', async () => {
+  // Samotný manifest odhalí chybějící položku precache, ale ne překlep v CSS.
+  // Projdeme i vnořené styly: fonty mají vlastní soubor s relativními cestami.
+  const files = await readdir('dist', { recursive: true });
+  for (const file of files.filter((name) => name.endsWith('.css'))) {
+    const css = await readFile(`dist/${file}`, 'utf8');
+    for (const match of css.matchAll(/url\(\s*['"]?([^'"\s)]+)['"]?\s*\)/g)) {
+      const url = match[1]!;
+      if (/^(?:data:|https?:|\/\/|#)/.test(url)) continue;
+      const asset = resolve('dist', dirname(file), url.split(/[?#]/)[0]!);
+      assert.ok((await stat(asset)).isFile(), `${file}: ${url}`);
+    }
   }
 });
